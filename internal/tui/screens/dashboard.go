@@ -169,8 +169,8 @@ func (s *DashboardScreen) activateMenuByKey(key string) (tui.Screen, tea.Cmd) {
 		td := NewTokenDetailScreen(s.ctx, s.theme, s.token)
 		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: td} }
 	case tui.KeyEngines:
-		s.lastErr = fmt.Errorf("secrets engine browser arrives in phase 3")
-		return s, nil
+		el := NewEngineListScreen(s.ctx, s.theme)
+		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: el} }
 	case "q":
 		return s, tea.Quit
 	}

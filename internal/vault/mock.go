@@ -21,6 +21,7 @@ type MockClient struct {
 	RenewTokenFn  func(ctx context.Context, increment int) (*TokenInfo, error)
 	WatcherFn     func(increment int) (*TokenWatcher, error)
 	ListMountsFn  func(ctx context.Context) (map[string]*MountInfo, error)
+	ListKVFn      func(ctx context.Context, mount string, version int, key string) ([]string, error)
 	KVv1Fn        func(mount string) any
 	KVv2Fn        func(mount string) any
 }
@@ -75,6 +76,13 @@ func (m *MockClient) ListMounts(ctx context.Context) (map[string]*MountInfo, err
 		return nil, errMockNotConfigured
 	}
 	return m.ListMountsFn(ctx)
+}
+
+func (m *MockClient) ListKV(ctx context.Context, mount string, version int, key string) ([]string, error) {
+	if m.ListKVFn == nil {
+		return nil, errMockNotConfigured
+	}
+	return m.ListKVFn(ctx, mount, version, key)
 }
 
 func (m *MockClient) KVv1(mount string) any {

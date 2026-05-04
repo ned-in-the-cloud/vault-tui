@@ -64,6 +64,7 @@ type Client interface {
 	NewTokenWatcher(increment int) (*TokenWatcher, error)
 
 	ListMounts(ctx context.Context) (map[string]*MountInfo, error)
+	ListKV(ctx context.Context, mount string, version int, key string) ([]string, error)
 
 	// KVv1 / KVv2 are placeholders for Phase 4 and return implementations
 	// that satisfy the engine interfaces in kv.go (added later).

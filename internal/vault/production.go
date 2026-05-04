@@ -134,10 +134,57 @@ func (a *apiClient) RenewToken(ctx context.Context, increment int) (*TokenInfo, 
 }
 
 func (a *apiClient) ListMounts(ctx context.Context) (map[string]*MountInfo, error) {
-	mounts, err := a.c.Sys().ListMountsWithContext(ctx)
+	// Try the privileged sys/mounts endpoint first; fall back to
+	// sys/internal/ui/mounts for tokens that lack `read` on
+	// sys/mounts (the same fallback the Vault CLI uses to render
+	// `vault secrets list` for non-root users).
+	if mounts, err := a.c.Sys().ListMountsWithContext(ctx); err == nil {
+		return convertMounts(mounts), nil
+	}
+	return a.listUIMounts(ctx)
+}
+
+// listUIMounts queries sys/internal/ui/mounts which returns only the
+// mounts visible to the current token. The response shape is:
+//
+//	{ "data": { "secret": { "mount-path/": { "type": "kv", "options": {...}, ... } } } }
+func (a *apiClient) listUIMounts(ctx context.Context) (map[string]*MountInfo, error) {
+	resp, err := a.c.Logical().ReadWithContext(ctx, "sys/internal/ui/mounts")
 	if err != nil {
 		return nil, classifyError(err)
 	}
+	if resp == nil || resp.Data == nil {
+		return map[string]*MountInfo{}, nil
+	}
+	secretSection, _ := resp.Data["secret"].(map[string]interface{})
+	out := make(map[string]*MountInfo, len(secretSection))
+	for path, raw := range secretSection {
+		entry, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		mi := &MountInfo{Path: path}
+		if v, ok := entry["type"].(string); ok {
+			mi.Type = v
+		}
+		if v, ok := entry["description"].(string); ok {
+			mi.Description = v
+		}
+		if opts, ok := entry["options"].(map[string]interface{}); ok && len(opts) > 0 {
+			mi.Options = make(map[string]string, len(opts))
+			for k, v := range opts {
+				if s, ok := v.(string); ok {
+					mi.Options[k] = s
+				}
+			}
+		}
+		out[path] = mi
+	}
+	return out, nil
+}
+
+// convertMounts adapts the privileged Sys().ListMounts response.
+func convertMounts(mounts map[string]*vaultapi.MountOutput) map[string]*MountInfo {
 	out := make(map[string]*MountInfo, len(mounts))
 	for path, m := range mounts {
 		mi := &MountInfo{
@@ -153,7 +200,7 @@ func (a *apiClient) ListMounts(ctx context.Context) (map[string]*MountInfo, erro
 		}
 		out[path] = mi
 	}
-	return out, nil
+	return out
 }
 
 // KV implementations are added in Phase 4. For Phase 1 the methods exist
