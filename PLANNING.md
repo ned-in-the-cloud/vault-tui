@@ -2,9 +2,10 @@
 
 ## Context
 
-Build a terminal UI for HashiCorp Vault in Go that provides safe, interactive access to Vault secrets. The core problem: the Vault CLI is not intuitive for inexperienced users and can potentially leak secrets to the terminal. This TUI helps users navigate the Vault server while ensuring secret values are **never displayed in plaintext on-screen** — they can only be sent to explicit output sinks such as clipboard (with auto-clear), exported as env vars, or written to local files through a deliberate export flow. The initial scope covers connection/auth, dashboard, token management, and full KV v1/v2 secrets engine support, including file export for KV secrets. The architecture is designed for future extension to dynamic secrets engines and operator functions.
+Build a terminal UI for HashiCorp Vault in Go that provides safe, interactive access to Vault secrets. The core problem: the Vault CLI is not intuitive for inexperienced users and can potentially leak secrets to the terminal. This TUI helps users navigate the Vault server while ensuring secret values are **never displayed in plaintext on-screen** — they can only be sent to explicit output sinks: the clipboard (with auto-clear) or local files written through a deliberate export flow. The initial scope covers connection/auth (with Vault Enterprise namespace support), dashboard, token management, and full KV v1/v2 secrets engine support, including file export for KV secrets. The architecture is designed for future extension to dynamic secrets engines and operator functions.
 
 **Go module**: `github.com/ned1313/vault-tui`
+**Minimum Go version**: 1.23
 
 ## Technology Stack
 
@@ -18,6 +19,8 @@ Build a terminal UI for HashiCorp Vault in Go that provides safe, interactive ac
 | Token storage | `zalando/go-keyring` | OS keyring (Keychain/Credential Manager/Secret Service) |
 | Memory security | `awnumar/memguard` | Encrypted memory for secrets |
 | Clipboard | `golang.design/x/clipboard` | Cross-platform clipboard with auto-clear |
+
+**Build / quality tooling**: `go vet`, `staticcheck`, `golangci-lint`, `gosec`. All wired into `Makefile` targets and run in CI before tests.
 
 ## Project Structure
 
@@ -36,10 +39,10 @@ vault-tui/
 │   │   └── mock.go                    # Mock Client for tests
 │   ├── secure/                        # Security primitives
 │   │   ├── memory.go                  # SecureString type (memguard Enclave wrapper)
-│   │   ├── keyring.go                 # Token store: keyring primary, encrypted file fallback
+│   │   ├── keyring.go                 # Token store: keyring primary, passphrase-encrypted file fallback, no-persistence final fallback
 │   │   ├── clipboard.go              # Copy + auto-clear goroutine
 │   │   ├── fileexport.go             # Export secrets to local files with secure permissions
-│   │   └── crypto.go                  # AES-GCM encrypted file fallback
+│   │   └── crypto.go                  # AES-256-GCM at-rest encryption for tokens.enc; key derived from a startup passphrase via Argon2id and cached in a memguard Enclave for the process lifetime
 │   ├── config/                        # User preferences
 │   │   ├── config.go                  # Config struct, load/save (~/.vault-tui/config.json)
 │   │   ├── preferences.go            # Confirmation suppression per category
@@ -70,7 +73,7 @@ vault-tui/
 │   │       ├── secretversions.go      # Version list (v2)
 │   │       └── secretdelete.go        # Delete/destroy flow
 │   └── logging/
-│       └── logger.go                  # slog-based, file-only output
+│       └── logger.go                  # slog-based, file-only output to ~/.vault-tui/vault-tui.log; redaction rules: never log secret values, log secret keys only at debug, log paths at info, never echo response bodies, never log tokens or token accessors above debug. No built-in rotation (use OS log rotation tools).
 ├── go.mod
 ├── go.sum
 ├── Makefile
@@ -87,11 +90,21 @@ vault-tui/
 
 4. **`SecureString` everywhere** — All secret values are `memguard.Enclave` wrappers. Opened to `LockedBuffer` only for the minimum duration needed (clipboard write, API call), then destroyed.
 
-5. **KV v2 `subkeys` for display** — The secret view screen loads key names via the `subkeys` endpoint (no values returned). Secret values are only fetched when the user explicitly copies. Browsing secrets never puts plaintext in memory.
+5. **KV v2 `subkeys` for display** — For KV v2, the secret view screen loads key names via the `subkeys` endpoint (no values returned). Secret values are only fetched when the user explicitly copies, exports, or saves to file. KV v1 has no metadata-only equivalent, so opening a v1 secret unavoidably fetches values; the implementation must wrap them in `SecureString` immediately and never render plaintext on-screen.
 
-6. **Explicit output sinks** — Secrets are never rendered in plaintext in the TUI. Sensitive values may only leave secure memory through explicit user actions: clipboard copy, env-var export, or local file export. File export is treated as higher risk than clipboard and uses an explicit export flow with format selection, path selection, overwrite confirmation, and private file permissions.
+6. **Explicit output sinks** — Secrets are never rendered in plaintext in the TUI. Sensitive values may only leave secure memory through two explicit user actions: clipboard copy or local file export. File export is treated as higher risk than clipboard and uses an explicit export flow with format selection, path selection, overwrite confirmation, and private file permissions.
 
-7. **Confirmation categories** — Four independent suppression flags in config (delete version, destroy version, delete all, destroy all). Destroy operations require typing "DESTROY" regardless of suppression.
+7. **All Vault I/O is asynchronous** — Vault API calls never run inline in `Update`. They are wrapped in `tea.Cmd` closures that return result messages (success/error). The UI shows a loading indicator while waiting. This applies to login, lookup, list, get, put, patch, delete, and metadata calls.
+
+8. **Vault Enterprise namespaces are first-class** — Each server history entry stores an optional namespace. The active namespace is applied to every Vault call via `X-Vault-Namespace` and is surfaced in the status bar alongside the server address. The active namespace can be changed mid-session via a hotkey (`N`) on the dashboard and engine list; the change applies only to subsequent calls.
+
+9. **TLS is determined by the server URL scheme** — `https://` enables TLS; `http://` does not. There is no separate TLS toggle. Connecting to an `http://` address requires explicit warning + confirmation. Users may provide a custom CA bundle path per server entry; if absent, the system trust store is used.
+
+10. **Token persistence is a layered fallback** — (1) OS keyring via `go-keyring`, (2) AES-256-GCM-encrypted file at `~/.vault-tui/tokens.enc` with key derived from a user passphrase via Argon2id, (3) no persistence, login each session. The passphrase is prompted once at startup and the derived key is cached in a memguard `Enclave` for the lifetime of the TUI process. Tokens are keyed by `address + auth_method + identifier` so multiple identities per server do not overwrite each other. For Token auth, `identifier` is the token's `display_name` if set, falling back to its accessor.
+
+11. **Re-auth preserves the screen stack** — On `ErrInvalidToken`, the auth screen is pushed on top of the current stack. On successful re-auth, it pops back to the originating screen and the failed operation may be retried. In-progress edit forms are preserved.
+
+12. **Confirmation categories** — Four independent suppression flags in config (delete version, destroy version, delete all, destroy all). Destroy operations require typing "DESTROY" regardless of suppression. The file-export overwrite prompt is independent and never suppressed.
 
 ---
 
@@ -112,6 +125,9 @@ vault-tui/
   type Client interface {
       SetAddress(addr string) error
       Address() string
+      SetNamespace(ns string)         // empty string clears
+      Namespace() string
+      SetCABundlePath(path string) error // empty path uses system trust store
       Health(ctx context.Context) (*HealthInfo, error)
       Login(ctx context.Context, method AuthMethod) (*TokenInfo, error)
       SetToken(token string)
@@ -123,24 +139,28 @@ vault-tui/
   }
   ```
 - `internal/vault/errors.go` — Sentinel errors mapped from HTTP status codes: `ErrPermissionDenied` (403), `ErrNotFound` (404), `ErrServerSealed` (503), `ErrConnectionFailed`, `ErrInvalidToken`
-- `internal/vault/auth.go` — Auth method types (Token, UserPass, LDAP) with login logic per method. Only human auth methods for now; OIDC and machine auth (AppRole) will be added later.
+- `internal/vault/auth.go` — Auth method types (Token, UserPass, LDAP) with login logic per method. Each `AuthMethod` exposes an `Identifier()` string used to key stored tokens: UserPass and LDAP use the username; Token auth uses the token's `display_name` if set, falling back to its accessor. Only human auth methods for now; OIDC and machine auth (AppRole) will be added later.
 - `internal/vault/mock.go` — `MockClient` with configurable function fields per method
 
 ### 1c. Secure Storage
 - `internal/secure/memory.go` — `SecureString` wrapping `memguard.Enclave`. Methods: `NewSecureString([]byte)`, `Open() (*LockedBuffer, error)`, `Destroy()`
-- `internal/secure/keyring.go` — Store/load/delete tokens via `go-keyring`, keyed by server address. Falls back to encrypted file.
-- `internal/secure/crypto.go` — AES-256-GCM encrypted file at `~/.vault-tui/tokens.enc` for systems without keyring
+- `internal/secure/keyring.go` — Layered token store. Tokens are keyed by `address + auth_method + identifier`. Resolution order on read/write:
+  1. OS keyring via `go-keyring` (Keychain / Credential Manager / Secret Service)
+  2. `tokens.enc` encrypted with a user passphrase (Argon2id key derivation, prompted once at startup; derived key held in a memguard `Enclave` for the process lifetime)
+  3. No persistence; user must re-auth each session.
+  The active layer is detected at startup based on platform support and user config.
+- `internal/secure/crypto.go` — AES-256-GCM at-rest encryption for `~/.vault-tui/tokens.enc`. Key is derived from the startup passphrase via Argon2id, cached in a memguard `Enclave`, and never written to disk alongside the ciphertext.
 - `internal/secure/clipboard.go` — `CopyToClipboard(data, clearAfter)` with auto-clear goroutine
 - `internal/secure/fileexport.go` — Writes exported secrets to user-selected paths. Defaults to `~/.vault-tui/exports`, prompts before overwrite, ensures private file permissions, and is structured to support optional encrypted exports later.
 
 ### 1d. Config System
-- `internal/config/config.go` — Load/save `~/.vault-tui/config.json`. Fields: `MaskingStyle` (Stars/Blank), `ClipboardClearSecs` (default 15), `ConfirmationPrefs`, `ServerHistory`, `DefaultAuthMethod`, `AutoRenewToken`, `DefaultExportDir`, `PreferEncryptedFileExport` (future)
+- `internal/config/config.go` — Load/save `~/.vault-tui/config.json`. Fields: `MaskingStyle` (Stars/Blank), `ClipboardClearSecs` (default 15), `ConfirmationPrefs`, `ServerHistory`, `DefaultAuthMethod`, `AutoRenewToken`, `DefaultExportDir`, `DefaultExportFormat` (JSON / YAML / .env / single-key), `PreferEncryptedFileExport` (future), `TokenPersistenceMode` (auto / keyring / passphrase / none)
 - `internal/config/preferences.go` — `ConfirmationPrefs` with four boolean suppress fields
-- `internal/config/history.go` — `ServerEntry{Address, LastUsed, AuthMethod, AuthPath}`
+- `internal/config/history.go` — `ServerEntry{Address, Namespace, CABundlePath, LastUsed, AuthMethod, AuthPath, LastIdentifier}`
 
 ### 1e. Connect and Auth Screens
-- `internal/tui/screens/connect.go` — Server address input (with history list), TLS toggle. Calls `Health()` to verify, then navigates to auth screen.
-- `internal/tui/screens/auth.go` — Two-step: select auth method (Token, UserPass, LDAP) + mount path, then dynamic credential fields per method. All secret inputs use configured masking. On success: store token in keyring, navigate to dashboard.
+- `internal/tui/screens/connect.go` — Server address input (with history list), optional namespace field, optional CA bundle path. TLS is implied by the URL scheme (`https://` enables TLS, `http://` disables it). Connecting to an `http://` address shows a danger-level warning and requires explicit confirmation. Calls `Health()` to verify, then navigates to auth screen.
+- `internal/tui/screens/auth.go` — Two-step: select auth method (Token, UserPass, LDAP) + mount path, then dynamic credential fields per method. All secret inputs use configured masking. On success: store token in the active persistence layer keyed by `address + auth_method + identifier`, navigate to dashboard.
 
 ### Testing
 - Unit: error classification, mock client interface satisfaction, config round-trip, stack push/pop, keyring with mock, crypto encrypt/decrypt round-trip
@@ -153,8 +173,8 @@ vault-tui/
 **Goal**: Post-auth home screen with live token info, server details, and token renewal.
 
 ### 2a. Dashboard
-- `internal/tui/screens/dashboard.go` — Three panels: Server Info (address, seal status, version), Token Info (policies, TTL countdown, accessor), Navigation Menu (Secrets Engines, Token Management, Settings)
-- `internal/tui/components/statusbar.go` — Persistent bottom bar with server address, TTL countdown (via `tea.Tick`), policy summary. Rendered by root model below active screen.
+- `internal/tui/screens/dashboard.go` — Three panels: Server Info (address, namespace, seal status, version), Token Info (policies, TTL countdown, accessor, identity), Navigation Menu (Secrets Engines, Token Management, Settings). Hotkey `N` opens a namespace-switch prompt; the new namespace applies to subsequent calls only.
+- `internal/tui/components/statusbar.go` — Persistent bottom bar with server address, namespace (when set), TTL countdown (via `tea.Tick`), policy summary. Rendered by root model below active screen.
 - TTL countdown via `tea.Tick(time.Second)`. If `AutoRenewToken` enabled, start `LifetimeWatcher` in `Init()`.
 
 ### 2b. Token Management
@@ -172,7 +192,7 @@ vault-tui/
 **Goal**: Browse available secrets engines, select a KV mount, navigate the secret path hierarchy.
 
 ### 3a. Engine List
-- `internal/tui/screens/enginelist.go` — Calls `ListMounts()`, filters to KV type, shows mount path + version + description. Selecting navigates to secret list.
+- `internal/tui/screens/enginelist.go` — Calls `ListMounts()`, filters to KV type, shows mount path + version + description. Selecting navigates to secret list. Hotkey `N` opens the same namespace-switch prompt as the dashboard; on switch the mount list is reloaded.
 - `internal/vault/sys.go` — `MountInfo{Path, Type, Description, Options}`, `ListMounts` implementation
 
 ### 3b. Secret Path Browser
@@ -207,7 +227,8 @@ vault-tui/
       GetVersionsList(ctx, path) ([]KVVersionMeta, error)
       GetMetadata(ctx, path) (*KVMetadata, error)
       GetSubkeys(ctx, path, version, depth) ([]string, error)
-      Patch(ctx, path, data) error
+      Put(ctx, path, data, cas *int) error // overrides KVEngine.Put with optional CAS
+      Patch(ctx, path, data, cas *int) error
       DeleteVersions(ctx, path, versions) error
       UndeleteVersions(ctx, path, versions) error
       DestroyVersions(ctx, path, versions) error
@@ -231,7 +252,7 @@ vault-tui/
 
 ### 5a. Secret View
 - `internal/tui/screens/secretview.go` — Shows key names with masked values (`********`). **Key design**: for KV v2, loads only key names via `GetSubkeys` (no secret data in memory); for KV v1, calls `Get` and wraps immediately.
-- Actions: `c` copy value to clipboard (opens SecureString only then), `e` export as env var (opens SecureString, calls `os.Setenv`, destroys buffer — available to child processes, not parent shell), `f` export to local file, `v` view versions, `u` update, `d` delete, `n` create new
+- Actions: `c` copy value to clipboard (opens SecureString only then), `f` export to local file, `v` view versions, `u` update, `d` delete, `n` create new
 
 ### 5b. Secret File Export
 - `internal/tui/screens/secretexport.go` — Explicit export flow for local files. User selects export mode, output path, and confirms write if the target already exists.
@@ -288,8 +309,8 @@ KV v1 delete is permanent → uses Destructive danger level.
 **Goal**: Production-quality UX, help system, settings, error recovery.
 
 - `internal/tui/components/help.go` — Context-sensitive help via `bubbles/help`, toggled with `?`
-- `internal/tui/screens/settings.go` — Configure masking style, clipboard clear duration, auto-renew, default export directory, reset confirmation prefs, clear server history, and later opt into encrypted file export when implemented
-- Token expiry recovery: any `ErrInvalidToken` triggers re-auth flow (try stored token first, then navigate to auth screen)
+- `internal/tui/screens/settings.go` — Configure masking style, clipboard clear duration, auto-renew, default export directory, default export format, custom CA bundle path defaults, token persistence mode, reset confirmation prefs, clear server history, and later opt into encrypted file export when implemented
+- Token expiry recovery: any `ErrInvalidToken` pushes the auth screen on top of the current stack (try stored token first, then prompt). On success, the stack pops back to the screen that issued the failed call; in-progress edit forms are preserved.
 - `internal/tui/components/errordisplay.go` — Color-coded error overlay, auto-dismiss, action buttons for reconnect/re-auth
 - Extensibility: `enginelist.go` shows all mount types, "Not yet supported" for non-KV, making future additions incremental
 
@@ -304,11 +325,9 @@ Phase 1 (Scaffolding + Connect + Auth)
    │       │
    │       └──→ Phase 3 (Engine List + Path Browser)
    │               │
-   ├──→ Phase 4 (KV Interface Layer) ←── can parallel w/ Phases 2-3
-   │               │
-   │               └──→ Phase 5 (KV Operations)
-   │                       │
-   └───────────────────────└──→ Phase 6 (Polish + Extensibility)
+   │               └──→ Phase 5 (KV Operations) ──→ Phase 6 (Polish + Extensibility)
+   │                       ▲
+   └──→ Phase 4 (KV Interface Layer) ──┘    (Phase 4 can run in parallel with 2 and 3)
 ```
 
 ## Verification Plan
@@ -316,6 +335,6 @@ Phase 1 (Scaffolding + Connect + Auth)
 1. **Dev Vault server**: `vault server -dev` for all integration testing
 2. **Per-phase manual testing**: Each phase should produce a runnable binary demonstrating that phase's features
 3. **Security verification**: After each phase, confirm no plaintext secrets visible in screen output, clipboard clears correctly, exported files use private permissions, and memguard Enclaves are destroyed
-4. **Auth testing**: Test with Token, UserPass, and LDAP methods against dev server
+4. **Auth testing**: Test with Token, UserPass, and LDAP methods against dev server, including multiple stored identities per server and namespace scoping (Enterprise dev server)
 5. **KV testing**: Seed both v1 and v2 mounts, test full CRUD + version operations + file export flows (JSON, YAML, `.env`, single-key raw file)
-6. **Error path testing**: Test with restricted policies to verify permission denied handling, test with expired tokens to verify re-auth flow
+6. **Error path testing**: Test with restricted policies to verify permission denied handling, test with expired tokens to verify re-auth stack-preservation flow, test connecting to an `http://` address triggers warning + confirmation, test invalid CA bundle path produces a clear error
