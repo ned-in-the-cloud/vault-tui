@@ -1,0 +1,33 @@
+# Go binaries and build outputs
+bin/
+build/
+dist/
+vault-tui
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Coverage artifacts
+coverage.out
+coverage.html
+
+# Environment files
+.env
+.env.*
+
+# Editor and OS files
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local application data and logs
+.vault-tui/
+*.log
