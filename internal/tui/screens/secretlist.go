@@ -2,7 +2,6 @@ package screens
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -124,8 +123,14 @@ func (s *SecretListScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 			next := NewSecretListScreen(s.ctx, s.theme, s.mount, s.version, child)
 			return s, func() tea.Msg { return tui.PushScreenMsg{Screen: next} }
 		}
-		// Secret view arrives in Phase 5.
-		s.err = fmt.Errorf("secret view arrives in phase 5")
+		// Leaf: push the secret view screen.
+		leaf := strings.TrimSuffix(s.path, "/")
+		if leaf != "" {
+			leaf += "/"
+		}
+		leaf += k
+		next := NewSecretViewScreen(s.ctx, s.theme, s.mount, s.version, leaf)
+		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: next} }
 	case "backspace":
 		return s, func() tea.Msg { return tui.PopScreenMsg{} }
 	case "R":

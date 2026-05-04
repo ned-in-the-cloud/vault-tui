@@ -224,8 +224,8 @@ func newKVv1Engine(c *vaultapi.Client, mount string) *kvV1Engine {
 	return &kvV1Engine{c: c, mount: strings.Trim(mount, "/")}
 }
 
-func (e *kvV1Engine) Version() int   { return 1 }
-func (e *kvV1Engine) Mount() string  { return e.mount }
+func (e *kvV1Engine) Version() int  { return 1 }
+func (e *kvV1Engine) Mount() string { return e.mount }
 func (e *kvV1Engine) listPath(p string) string {
 	p = strings.Trim(p, "/")
 	if p == "" {
@@ -285,8 +285,8 @@ func (e *kvV1Engine) Delete(ctx context.Context, path string) error {
 // ---- KV v2 implementation -------------------------------------------------
 
 type kvV2Engine struct {
-	c     *vaultapi.Client
-	mount string
+	c      *vaultapi.Client
+	mount  string
 	helper *vaultapi.KVv2
 }
 
