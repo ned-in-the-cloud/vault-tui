@@ -66,8 +66,8 @@ type Client interface {
 	ListMounts(ctx context.Context) (map[string]*MountInfo, error)
 	ListKV(ctx context.Context, mount string, version int, key string) ([]string, error)
 
-	// KVv1 / KVv2 are placeholders for Phase 4 and return implementations
-	// that satisfy the engine interfaces in kv.go (added later).
-	KVv1(mount string) any
-	KVv2(mount string) any
+	// KVv1 returns a KV v1 engine bound to the given mount path.
+	KVv1(mount string) KVEngine
+	// KVv2 returns a KV v2 engine bound to the given mount path.
+	KVv2(mount string) KVv2Engine
 }

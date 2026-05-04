@@ -22,8 +22,8 @@ type MockClient struct {
 	WatcherFn     func(increment int) (*TokenWatcher, error)
 	ListMountsFn  func(ctx context.Context) (map[string]*MountInfo, error)
 	ListKVFn      func(ctx context.Context, mount string, version int, key string) ([]string, error)
-	KVv1Fn        func(mount string) any
-	KVv2Fn        func(mount string) any
+	KVv1Fn        func(mount string) KVEngine
+	KVv2Fn        func(mount string) KVv2Engine
 }
 
 var errMockNotConfigured = errors.New("mock: function not configured")
@@ -85,14 +85,14 @@ func (m *MockClient) ListKV(ctx context.Context, mount string, version int, key 
 	return m.ListKVFn(ctx, mount, version, key)
 }
 
-func (m *MockClient) KVv1(mount string) any {
+func (m *MockClient) KVv1(mount string) KVEngine {
 	if m.KVv1Fn == nil {
 		return nil
 	}
 	return m.KVv1Fn(mount)
 }
 
-func (m *MockClient) KVv2(mount string) any {
+func (m *MockClient) KVv2(mount string) KVv2Engine {
 	if m.KVv2Fn == nil {
 		return nil
 	}

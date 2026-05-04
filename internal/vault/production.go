@@ -203,10 +203,8 @@ func convertMounts(mounts map[string]*vaultapi.MountOutput) map[string]*MountInf
 	return out
 }
 
-// KV implementations are added in Phase 4. For Phase 1 the methods exist
-// only to satisfy the interface; calling them returns nil.
-func (a *apiClient) KVv1(mount string) any { return nil }
-func (a *apiClient) KVv2(mount string) any { return nil }
+func (a *apiClient) KVv1(mount string) KVEngine   { return newKVv1Engine(a.c, mount) }
+func (a *apiClient) KVv2(mount string) KVv2Engine { return newKVv2Engine(a.c, mount) }
 
 // tokenInfoFromMap parses a Vault token lookup response payload.
 func tokenInfoFromMap(rawToken string, data map[string]interface{}) *TokenInfo {
