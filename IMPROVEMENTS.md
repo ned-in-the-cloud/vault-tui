@@ -10,7 +10,7 @@ Legend:
 ## Prioritized Execution Order
 
 - [x] Finish namespace switching so changing the namespace immediately refreshes the current screen state.
-- [ ] Implement expired-token recovery and stack-preserving re-auth.
+- [x] Implement expired-token recovery and stack-preserving re-auth.
 - [ ] Add the settings/help/error-display polish layer from Phase 6.
 - [ ] Implement rollback, delete-all, and destroy-all version workflows.
 - [ ] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
@@ -97,7 +97,7 @@ Legend:
 
 - [ ] Implement context-sensitive help component.
 - [ ] Implement settings screen for masking, clipboard, auto-renew, export defaults, persistence mode, confirmation reset, and history clearing.
-- [ ] Implement token-expiry recovery that pushes auth on `ErrInvalidToken` and returns to the interrupted screen after re-auth.
+- [x] Implement token-expiry recovery that pushes auth on `ErrInvalidToken` and returns to the interrupted screen after re-auth.
 - [ ] Implement a dedicated error overlay/toast with reconnect and re-auth actions.
 - [ ] Preserve in-progress edit state across the planned re-auth flow.
 
@@ -109,5 +109,4 @@ Legend:
 
 ## Next Recommended Slice
 
-- [ ] Implement expired-token recovery and stack-preserving re-auth.
 - [ ] Add the settings/help/error-display polish layer from Phase 6.

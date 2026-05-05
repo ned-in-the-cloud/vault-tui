@@ -132,6 +132,9 @@ func (s *SecretEditScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		s.saving = false
 		if m.err != nil {
 			s.err = m.err
+			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+				return s, cmd
+			}
 			return s, nil
 		}
 		return s, func() tea.Msg { return tui.PopScreenMsg{} }

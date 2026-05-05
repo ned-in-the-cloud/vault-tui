@@ -72,6 +72,11 @@ func (s *SecretVersionsScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	case versionsLoadedMsg:
 		s.loading = false
 		s.err = m.err
+		if m.err != nil {
+			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+				return s, cmd
+			}
+		}
 		s.versions = m.versions
 		s.curVersion = m.curVersion
 		if s.idx >= len(s.versions) {
@@ -81,6 +86,9 @@ func (s *SecretVersionsScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	case opCompletedMsg:
 		if m.err != nil {
 			s.err = m.err
+			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+				return s, cmd
+			}
 			return s, nil
 		}
 		s.statusMsg = m.msg

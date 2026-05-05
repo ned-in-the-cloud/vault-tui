@@ -72,6 +72,7 @@ type keysLoadedMsg struct {
 
 type canCreateMsg struct {
 	canCreate bool
+	err       error
 }
 
 func (s *SecretListScreen) loadCmd() tea.Cmd {
@@ -120,7 +121,7 @@ func (s *SecretListScreen) probeCreateCmd() tea.Cmd {
 		defer cancel()
 		caps, err := vc.Capabilities(ctx, probe)
 		if err != nil {
-			return canCreateMsg{canCreate: false}
+			return canCreateMsg{canCreate: false, err: err}
 		}
 		can := false
 		for _, c := range caps {
@@ -141,12 +142,22 @@ func (s *SecretListScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	case keysLoadedMsg:
 		s.loading = false
 		s.err = m.err
+		if m.err != nil {
+			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+				return s, cmd
+			}
+		}
 		s.keys = m.keys
 		s.idx = 0
 		s.applyFilter()
 		return s, s.probeCreateCmd()
 	case canCreateMsg:
 		s.canCreate = m.canCreate
+		if m.err != nil {
+			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+				return s, cmd
+			}
+		}
 		return s, nil
 	case tea.KeyPressMsg:
 		return s.handleKey(m.String())

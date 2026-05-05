@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -40,6 +41,7 @@ type AuthScreen struct {
 	ctx    *tui.AppContext
 	theme  tui.Theme
 	health *vault.HealthInfo
+	reauth bool
 
 	step           authStep
 	selected       int
@@ -52,6 +54,16 @@ type AuthScreen struct {
 // NewAuthScreen constructs the auth flow. health is informational and may
 // be nil if not yet known.
 func NewAuthScreen(ctx *tui.AppContext, theme tui.Theme, health *vault.HealthInfo) tui.Screen {
+	return newAuthScreen(ctx, theme, health, false)
+}
+
+// NewReauthScreen constructs the auth flow in re-auth mode. On success,
+// it pops back to the previous screen instead of replacing the stack.
+func NewReauthScreen(ctx *tui.AppContext, theme tui.Theme) tui.Screen {
+	return newAuthScreen(ctx, theme, nil, true)
+}
+
+func newAuthScreen(ctx *tui.AppContext, theme tui.Theme, health *vault.HealthInfo, reauth bool) tui.Screen {
 	// Default selection from config.
 	def := 0
 	for i, opt := range authMethodOptions {
@@ -63,14 +75,25 @@ func NewAuthScreen(ctx *tui.AppContext, theme tui.Theme, health *vault.HealthInf
 		ctx:      ctx,
 		theme:    theme,
 		health:   health,
+		reauth:   reauth,
 		step:     stepSelectMethod,
 		selected: def,
 	}
 }
 
-func (s *AuthScreen) Title() string { return "Authenticate" }
+func (s *AuthScreen) Title() string {
+	if s.reauth {
+		return "Re-authenticate"
+	}
+	return "Authenticate"
+}
 
-func (s *AuthScreen) Init() tea.Cmd { return textinput.Blink }
+func (s *AuthScreen) Init() tea.Cmd {
+	if s.reauth {
+		return tea.Batch(textinput.Blink, s.tryStoredTokenCmd())
+	}
+	return textinput.Blink
+}
 
 func (s *AuthScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	switch m := msg.(type) {
@@ -127,8 +150,22 @@ func (s *AuthScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		// Update default auth method preference.
 		s.ctx.Config.DefaultAuthMethod = authMethodOptions[s.selected].methodID
 		s.ctx.SaveConfig()
+		if s.reauth {
+			return s, tea.Sequence(
+				func() tea.Msg { return tui.TokenInfoMsg{Info: m.tokenInfo} },
+				func() tea.Msg { return tui.PopScreenMsg{} },
+			)
+		}
 		dash := NewDashboardScreen(s.ctx, s.theme, m.tokenInfo, s.health)
 		return s, func() tea.Msg { return tui.ReplaceScreenMsg{Screen: dash} }
+	case authStoredTokenFailedMsg:
+		// Re-auth mode can silently fail the stored-token fast path and
+		// drop into the normal prompt flow.
+		s.err = m.err
+		if s.credentialView == nil {
+			s.step = stepSelectMethod
+		}
+		return s, nil
 	case authErrorMsg:
 		s.loading = false
 		s.err = m.err
@@ -244,6 +281,72 @@ type authSuccessMsg struct {
 }
 
 type authErrorMsg struct{ err error }
+
+type authStoredTokenFailedMsg struct{ err error }
+
+// tryStoredTokenCmd attempts a transparent re-auth using the most recent
+// token for the current address+namespace tuple. If no token can be
+// resolved (or login fails), the user remains on the manual auth flow.
+func (s *AuthScreen) tryStoredTokenCmd() tea.Cmd {
+	if !s.reauth || s.ctx == nil || s.ctx.Config == nil || s.ctx.Tokens == nil {
+		return nil
+	}
+	addr := s.ctx.Vault.Address()
+	ns := s.ctx.Vault.Namespace()
+	if addr == "" {
+		return nil
+	}
+
+	var entry *config.ServerEntry
+	for i := range s.ctx.Config.ServerHistory {
+		e := &s.ctx.Config.ServerHistory[i]
+		if e.Address == addr && e.Namespace == ns {
+			entry = e
+			break
+		}
+	}
+	if entry == nil || entry.AuthMethod == "" || entry.LastIdentifier == "" {
+		return nil
+	}
+
+	methodID := entry.AuthMethod
+	methodPath := entry.AuthPath
+	identifier := entry.LastIdentifier
+	if methodPath == "" {
+		switch methodID {
+		case config.AuthMethodToken:
+			methodPath = "token"
+		case config.AuthMethodUserPass:
+			methodPath = "userpass"
+		case config.AuthMethodLDAP:
+			methodPath = "ldap"
+		}
+	}
+	key := secure.TokenKey(addr, string(methodID), identifier)
+
+	return func() tea.Msg {
+		tok, err := s.ctx.Tokens.Get(key)
+		if err != nil {
+			return nil
+		}
+		am := vault.NewTokenAuth([]byte(tok))
+		defer am.Destroy()
+
+		ti, err := s.ctx.Vault.Login(s.ctx.BackgroundContext(), am)
+		if err != nil {
+			if errors.Is(err, vault.ErrInvalidToken) {
+				_ = s.ctx.Tokens.Delete(key)
+			}
+			return authStoredTokenFailedMsg{err: err}
+		}
+		return authSuccessMsg{
+			methodID:   methodID,
+			methodPath: methodPath,
+			identifier: ti.DisplayName,
+			tokenInfo:  ti,
+		}
+	}
+}
 
 // ---- credential form ----
 

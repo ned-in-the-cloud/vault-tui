@@ -76,6 +76,11 @@ func (s *EngineListScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	case mountsLoadedMsg:
 		s.loading = false
 		s.err = m.err
+		if m.err != nil {
+			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+				return s, cmd
+			}
+		}
 		s.mounts = m.mounts
 		s.idx = 0
 		return s, nil

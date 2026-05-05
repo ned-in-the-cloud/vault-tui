@@ -64,6 +64,9 @@ func (s *TokenDetailScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		s.renewing = false
 		if m.err != nil {
 			s.lastErr = fmt.Errorf("renew: %w", m.err)
+			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+				return s, cmd
+			}
 			return s, nil
 		}
 		s.token = m.info

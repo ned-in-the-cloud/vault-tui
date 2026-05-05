@@ -145,6 +145,11 @@ func (s *SecretViewScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	case secretLoadedMsg:
 		s.loading = false
 		s.err = m.err
+		if m.err != nil {
+			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+				return s, cmd
+			}
+		}
 		s.keys = m.keys
 		// Replace any previous data; destroy old before overwriting.
 		if s.secret != nil {
@@ -159,6 +164,9 @@ func (s *SecretViewScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	case opCompletedMsg:
 		if m.err != nil {
 			s.err = m.err
+			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+				return s, cmd
+			}
 			return s, nil
 		}
 		s.statusMsg = m.msg
@@ -169,6 +177,9 @@ func (s *SecretViewScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		return s, nil
 	case errMsg:
 		s.err = m.err
+		if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
+			return s, cmd
+		}
 		return s, nil
 	case tea.KeyPressMsg:
 		return s.handleKey(m.String())
