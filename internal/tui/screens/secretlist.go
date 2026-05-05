@@ -28,6 +28,11 @@ type SecretListScreen struct {
 	err     error
 	idx     int
 
+	// canCreate reports whether the current token has create/update
+	// capabilities at this path. Populated by an async probe after
+	// the key list loads; defaults to false (no "n new" hint shown).
+	canCreate bool
+
 	filter   string
 	filtered []string
 }
@@ -47,7 +52,12 @@ func NewSecretListScreen(ctx *tui.AppContext, theme tui.Theme, mi *vault.MountIn
 
 func (s *SecretListScreen) Title() string { return "Secrets" }
 func (s *SecretListScreen) HelpHint() string {
-	return "↑/↓ navigate  enter open  backspace up  / filter  R refresh  esc back"
+	parts := []string{"↑/↓ navigate", "enter open"}
+	if s.canCreate {
+		parts = append(parts, "n new")
+	}
+	parts = append(parts, "backspace up", "/ filter", "R refresh", "esc back")
+	return strings.Join(parts, "  ")
 }
 
 func (s *SecretListScreen) Init() tea.Cmd { return s.loadCmd() }
@@ -58,6 +68,10 @@ type keysLoadedMsg struct {
 	path string
 	keys []string
 	err  error
+}
+
+type canCreateMsg struct {
+	canCreate bool
 }
 
 func (s *SecretListScreen) loadCmd() tea.Cmd {
@@ -83,6 +97,45 @@ func (s *SecretListScreen) loadCmd() tea.Cmd {
 	}
 }
 
+// probeCreateCmd checks whether the current token can create a secret
+// under the current path by querying sys/capabilities-self for a probe
+// path beneath this folder. We pick a clearly-synthetic name so the
+// probe never collides with a real secret. Vault matches the literal
+// path against policy globs, so this correctly resolves capabilities
+// granted by patterns like `kv-v1/alice/*`.
+func (s *SecretListScreen) probeCreateCmd() tea.Cmd {
+	mount := strings.Trim(s.mount.Path, "/")
+	parent := strings.Trim(s.path, "/")
+	probe := mount
+	if s.version == 2 {
+		probe += "/data"
+	}
+	if parent != "" {
+		probe += "/" + parent
+	}
+	probe += "/__vault_tui_probe__"
+	vc := s.ctx.Vault
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		caps, err := vc.Capabilities(ctx, probe)
+		if err != nil {
+			return canCreateMsg{canCreate: false}
+		}
+		can := false
+		for _, c := range caps {
+			switch c {
+			case "create", "update", "root", "sudo":
+				can = true
+			}
+		}
+		return canCreateMsg{canCreate: can}
+	}
+}
+
+// refreshTokenCmd was replaced by the shared refreshTokenInfoCmd
+// helper in refreshtoken.go.
+
 func (s *SecretListScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	switch m := msg.(type) {
 	case keysLoadedMsg:
@@ -91,6 +144,9 @@ func (s *SecretListScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		s.keys = m.keys
 		s.idx = 0
 		s.applyFilter()
+		return s, s.probeCreateCmd()
+	case canCreateMsg:
+		s.canCreate = m.canCreate
 		return s, nil
 	case tea.KeyPressMsg:
 		return s.handleKey(m.String())
@@ -133,10 +189,23 @@ func (s *SecretListScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: next} }
 	case "backspace":
 		return s, func() tea.Msg { return tui.PopScreenMsg{} }
+	case "n":
+		if !s.canCreate {
+			return s, nil
+		}
+		// Create a new secret at the current path. Pre-fill the editor's
+		// path input with this directory plus a trailing slash so the
+		// user only has to type the leaf name.
+		parent := strings.TrimSuffix(s.path, "/")
+		if parent != "" {
+			parent += "/"
+		}
+		next := NewSecretEditScreen(s.ctx, s.theme, s.mount, s.version, parent, nil, true)
+		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: next} }
 	case "R":
 		s.loading = true
 		s.err = nil
-		return s, s.loadCmd()
+		return s, tea.Batch(s.loadCmd(), refreshTokenInfoCmd(s.ctx))
 	case "/":
 		// Toggle a tiny inline filter prompt: for now pre-seed with
 		// current filter so a second slash clears it.

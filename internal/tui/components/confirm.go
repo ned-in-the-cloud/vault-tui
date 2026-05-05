@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
@@ -39,9 +39,9 @@ type ConfirmStyles struct {
 // The owning screen calls Update(msg) and View(); it inspects Decided()
 // after each Update for the result.
 type ConfirmDialog struct {
-	Title       string
-	Body        string
-	Level       DangerLevel
+	Title         string
+	Body          string
+	Level         DangerLevel
 	OfferRemember bool
 
 	styles ConfirmStyles

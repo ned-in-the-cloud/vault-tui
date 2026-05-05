@@ -61,8 +61,8 @@ func TestPushConfirmShowsDialogWhenNotSkipped(t *testing.T) {
 	cfg := &config.Config{}
 	ctx := &tui.AppContext{Config: cfg}
 	cmd := PushConfirm(ctx, tui.Theme{}, ConfirmRequest{
-		Level:    components.DangerNormal,
-		Category: ConfirmDeleteVersion,
+		Level:     components.DangerNormal,
+		Category:  ConfirmDeleteVersion,
 		OnConfirm: func() tea.Msg { return nil },
 	})
 	msg := cmd()

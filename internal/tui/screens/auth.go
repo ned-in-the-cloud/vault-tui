@@ -107,6 +107,14 @@ func (s *AuthScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 				s.credentialView.advance(-1)
 				return s, nil
 			case "enter":
+				// If the focused field or any earlier required field is
+				// empty, advance to the first empty field instead of
+				// submitting. This makes it easy to tab through the
+				// form using only Enter when fields are blank.
+				if idx, blank := s.credentialView.firstEmpty(); blank {
+					s.credentialView.focusIndex(idx)
+					return s, nil
+				}
 				return s, s.submit()
 			}
 		}
@@ -292,6 +300,34 @@ func (c *credentialForm) advance(delta int) {
 	c.inputs[c.focus].Blur()
 	c.focus = (c.focus + delta + len(c.inputs)) % len(c.inputs)
 	c.inputs[c.focus].Focus()
+}
+
+// firstEmpty returns the index of the first input whose trimmed value
+// is empty. Any field whose label is "mount" is skipped because mount
+// inputs are pre-populated with sensible defaults. Returns ok=false
+// when every required field is filled in.
+func (c *credentialForm) firstEmpty() (int, bool) {
+	for i := range c.inputs {
+		if i < len(c.labels) && c.labels[i] == "mount" {
+			continue
+		}
+		if strings.TrimSpace(c.inputs[i].Value()) == "" {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// focusIndex moves focus to the given input index, blurring all others.
+func (c *credentialForm) focusIndex(i int) {
+	if i < 0 || i >= len(c.inputs) {
+		return
+	}
+	for j := range c.inputs {
+		c.inputs[j].Blur()
+	}
+	c.focus = i
+	c.inputs[i].Focus()
 }
 
 func (c *credentialForm) Update(msg tea.Msg) (*credentialForm, tea.Cmd) {

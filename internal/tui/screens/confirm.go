@@ -108,9 +108,9 @@ func confirmStylesFromTheme(t tui.Theme) components.ConfirmStyles {
 	}
 }
 
-func (s *ConfirmScreen) Title() string     { return "Confirm" }
-func (s *ConfirmScreen) HelpHint() string  { return "y confirm  ·  n/esc cancel" }
-func (s *ConfirmScreen) Init() tea.Cmd     { return nil }
+func (s *ConfirmScreen) Title() string    { return "Confirm" }
+func (s *ConfirmScreen) HelpHint() string { return "y confirm  ·  n/esc cancel" }
+func (s *ConfirmScreen) Init() tea.Cmd    { return nil }
 func (s *ConfirmScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	if _, ok := msg.(tea.KeyPressMsg); ok {
 		var cmd tea.Cmd

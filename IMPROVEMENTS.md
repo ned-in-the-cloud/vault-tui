@@ -15,6 +15,15 @@ Legend:
 - [ ] Implement rollback, delete-all, and destroy-all version workflows.
 - [ ] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
 
+## Completed In This Commit Batch
+
+- [x] Add global equivalent Vault CLI command overlay support (`alt+x`) with per-screen command rendering.
+- [x] Add global quit hotkey support for `Ctrl+Q` alongside `Ctrl+C`.
+- [x] Improve auth form Enter behavior by jumping to the first required empty field before submit.
+- [x] Add capability probing to gate secret creation actions in the path browser.
+- [x] Refresh token status-bar info alongside screen reload flows.
+- [x] Update KV v2 patch behavior to use read-write merge semantics for broader policy compatibility.
+
 ## Phase 1: Scaffolding, Connection, and Authentication
 
 - [x] Initialize memguard, load config, initialize logging, and start the Bubble Tea program.

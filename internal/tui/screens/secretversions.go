@@ -111,7 +111,7 @@ func (s *SecretVersionsScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 		}
 	case "R":
 		s.loading = true
-		return s, s.loadCmd()
+		return s, tea.Batch(s.loadCmd(), refreshTokenInfoCmd(s.ctx))
 	case "u":
 		v := s.selected()
 		if v == nil {

@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -11,14 +13,15 @@ import (
 // messages to the active screen, while handling global concerns
 // (quit, help toggle, error overlay, status bar).
 type rootModel struct {
-	ctx       *AppContext
-	theme     Theme
-	stack     *ScreenStack
-	width     int
-	height    int
-	lastErr   error
-	quitting  bool
-	tokenInfo *vault.TokenInfo // most recent token info for status bar
+	ctx         *AppContext
+	theme       Theme
+	stack       *ScreenStack
+	width       int
+	height      int
+	lastErr     error
+	quitting    bool
+	tokenInfo   *vault.TokenInfo // most recent token info for status bar
+	showCommand bool             // toggled by KeyShowCmd
 }
 
 // NewRoot constructs the root tea.Model with the supplied initial screen.
@@ -51,9 +54,15 @@ func (r *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		switch m.String() {
-		case KeyQuit:
+		case KeyQuit, KeyQuitAlt:
 			r.quitting = true
 			return r, tea.Quit
+		case KeyShowCmd:
+			// alt+x is reserved as a global toggle for the equivalent
+			// Vault CLI command overlay. It is not produced by typing
+			// in a textinput so we can safely intercept it here.
+			r.showCommand = !r.showCommand
+			return r, nil
 		case KeyBack:
 			// Pop unless this is the only screen on the stack.
 			if r.stack.Len() > 1 {
@@ -130,12 +139,25 @@ func (r *rootModel) View() tea.View {
 		errLine = r.theme.Error.Render("error: "+r.lastErr.Error()) + "\n"
 	}
 
+	var cmdLine string
+	if r.showCommand {
+		if vc, ok := cur.(VaultCommander); ok {
+			if c := strings.TrimSpace(vc.VaultCommand()); c != "" {
+				cmdLine = r.theme.Hint.Render("$ "+c) + "\n"
+			} else {
+				cmdLine = r.theme.Hint.Render("(no equivalent command on this screen)") + "\n"
+			}
+		} else {
+			cmdLine = r.theme.Hint.Render("(no equivalent command on this screen)") + "\n"
+		}
+	}
+
 	view := lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		"",
 		body,
 		"",
-		errLine+status,
+		cmdLine+errLine+status,
 	)
 	v := tea.NewView(view)
 	v.AltScreen = true
@@ -143,7 +165,7 @@ func (r *rootModel) View() tea.View {
 }
 
 func (r *rootModel) statusBar() string {
-	hint := "ctrl+c quit  esc back  ? help"
+	hint := "ctrl+c/ctrl+q quit  esc back  ? help  alt+x cmd"
 	if cur := r.stack.Current(); cur != nil {
 		if hh, ok := cur.(HelpHinter); ok {
 			if h := hh.HelpHint(); h != "" {
@@ -181,6 +203,14 @@ type TokenInfoMsg struct{ Info *vault.TokenInfo }
 // default help hint shown on the right side of the status bar.
 type HelpHinter interface {
 	HelpHint() string
+}
+
+// VaultCommander is implemented by screens that can describe the
+// equivalent Vault CLI command for their current operation. The
+// returned string should be a single line; an empty string means
+// "no equivalent command available right now".
+type VaultCommander interface {
+	VaultCommand() string
 }
 
 // ClearError returns a tea.Cmd that clears the global error line.

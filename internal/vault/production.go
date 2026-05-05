@@ -206,6 +206,14 @@ func convertMounts(mounts map[string]*vaultapi.MountOutput) map[string]*MountInf
 func (a *apiClient) KVv1(mount string) KVEngine   { return newKVv1Engine(a.c, mount) }
 func (a *apiClient) KVv2(mount string) KVv2Engine { return newKVv2Engine(a.c, mount) }
 
+func (a *apiClient) Capabilities(ctx context.Context, path string) ([]string, error) {
+	caps, err := a.c.Sys().CapabilitiesSelfWithContext(ctx, path)
+	if err != nil {
+		return nil, classifyError(err)
+	}
+	return caps, nil
+}
+
 // tokenInfoFromMap parses a Vault token lookup response payload.
 func tokenInfoFromMap(rawToken string, data map[string]interface{}) *TokenInfo {
 	ti := &TokenInfo{ID: rawToken}

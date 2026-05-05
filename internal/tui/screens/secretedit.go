@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ned1313/vault-tui/internal/secure"
 	"github.com/ned1313/vault-tui/internal/tui"
@@ -74,11 +74,14 @@ func NewSecretEditScreen(ctx *tui.AppContext, theme tui.Theme, mi *vault.MountIn
 		focus:        -1,
 	}
 	if create {
+		// Start with focus on the path input so the user can type the
+		// leaf name first; pairs are blurred until tab advances past
+		// the path.
 		s.pairs = []kvInput{newKVInput()}
 		s.pairs[0].keyFocused = true
-		s.pairs[0].key.Focus()
-		s.pathInput.Blur()
-		s.focus = 0
+		s.pairs[0].key.Blur()
+		s.pathInput.Focus()
+		s.focus = -1
 	} else {
 		// Update mode: pre-populate one empty pair; for patch mode the
 		// form represents only changed keys.
@@ -115,7 +118,7 @@ func (s *SecretEditScreen) Title() string {
 func (s *SecretEditScreen) HelpHint() string {
 	hints := []string{"tab next", "shift+tab prev", "ctrl+a add pair", "ctrl+d remove pair", "ctrl+s save"}
 	if !s.create && s.version == 2 {
-		hints = append(hints, "ctrl+p toggle patch")
+		hints = append(hints, "ctrl+t toggle patch")
 	}
 	hints = append(hints, "esc cancel")
 	return strings.Join(hints, "  ·  ")
@@ -162,9 +165,10 @@ func (s *SecretEditScreen) handleKey(m tea.KeyPressMsg) (tui.Screen, tea.Cmd) {
 			s.refocus()
 		}
 		return s, nil
-	case "ctrl+p":
+	case "ctrl+t":
 		if !s.create && s.version == 2 {
 			s.patchMode = !s.patchMode
+			s.rebuildPairsForMode()
 		}
 		return s, nil
 	case "ctrl+s":
@@ -289,6 +293,11 @@ func (s *SecretEditScreen) submit() (tui.Screen, tea.Cmd) {
 			continue
 		}
 		v := s.pairs[i].value.Value()
+		// In patch mode, an empty value means "leave this key unchanged"
+		// (the row was seeded from the existing secret with a placeholder).
+		if s.patchMode && !s.create && v == "" {
+			continue
+		}
 		// JSON-encode strings so PutFromSecure roundtrips through json
 		// decoders cleanly. Use json.Marshal so quotes and escapes are
 		// handled safely.
@@ -362,6 +371,35 @@ func destroyPairs(data map[string]*secure.SecureString) {
 	}
 }
 
+// rebuildPairsForMode resets the editable key/value rows to match the
+// currently selected mode. In Patch mode each existing key is seeded
+// as its own row with a "(unchanged)" value placeholder so the user
+// can either type a new value to update it or leave it empty to keep
+// the prior value. A trailing empty row is appended so new keys can
+// be added without the user manually pressing ctrl+a first. In
+// Overwrite mode (or when there are no existing keys to seed) the
+// form collapses back to a single empty pair.
+func (s *SecretEditScreen) rebuildPairsForMode() {
+	if s.patchMode && !s.create && len(s.existingKeys) > 0 {
+		pairs := make([]kvInput, 0, len(s.existingKeys)+1)
+		for _, k := range s.existingKeys {
+			p := newKVInput()
+			p.key.SetValue(k)
+			p.value.Placeholder = "(unchanged)"
+			pairs = append(pairs, p)
+		}
+		// Trailing empty row so the user can add a brand-new key without
+		// having to press ctrl+a first.
+		pairs = append(pairs, newKVInput())
+		s.pairs = pairs
+	} else {
+		s.pairs = []kvInput{newKVInput()}
+	}
+	s.focus = 0
+	s.pairs[0].keyFocused = true
+	s.refocus()
+}
+
 func (s *SecretEditScreen) View() string {
 	var b strings.Builder
 	bc := components.Breadcrumb{
@@ -384,7 +422,7 @@ func (s *SecretEditScreen) View() string {
 		if s.patchMode {
 			mode = "Patch (merge changes)"
 		}
-		b.WriteString(s.theme.Hint.Render("mode: " + mode + "  (ctrl+p to toggle)"))
+		b.WriteString(s.theme.Hint.Render("mode: " + mode + "  (ctrl+t to toggle)"))
 		b.WriteString("\n\n")
 	}
 

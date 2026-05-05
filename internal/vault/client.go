@@ -66,6 +66,12 @@ type Client interface {
 	ListMounts(ctx context.Context) (map[string]*MountInfo, error)
 	ListKV(ctx context.Context, mount string, version int, key string) ([]string, error)
 
+	// Capabilities returns the current token's capabilities for the
+	// given Vault path (as used by sys/capabilities-self). The list is
+	// returned verbatim from Vault and may contain values like "read",
+	// "create", "update", "delete", "sudo", "deny", or "root".
+	Capabilities(ctx context.Context, path string) ([]string, error)
+
 	// KVv1 returns a KV v1 engine bound to the given mount path.
 	KVv1(mount string) KVEngine
 	// KVv2 returns a KV v2 engine bound to the given mount path.

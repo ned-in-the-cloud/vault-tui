@@ -462,7 +462,11 @@ func (e *kvV2Engine) PutCAS(ctx context.Context, path string, data map[string]in
 }
 
 func (e *kvV2Engine) Patch(ctx context.Context, path string, data map[string]interface{}, cas *int) error {
-	var opts []vaultapi.KVOption
+	// Use the read-write merge strategy so callers only need
+	// read+update on data/<path> rather than the separate "patch"
+	// capability (which the HTTP PATCH method requires). This matches
+	// what most operators grant in practice.
+	opts := []vaultapi.KVOption{vaultapi.WithMergeMethod(vaultapi.KVMergeMethodReadWrite)}
 	if cas != nil {
 		opts = append(opts, vaultapi.WithCheckAndSet(*cas))
 	}

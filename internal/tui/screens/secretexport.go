@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ned1313/vault-tui/internal/config"
 	"github.com/ned1313/vault-tui/internal/secure"
@@ -88,8 +88,8 @@ func NewSecretExportScreen(ctx *tui.AppContext, theme tui.Theme, mi *vault.Mount
 	return s
 }
 
-func (s *SecretExportScreen) Title() string    { return "Export secret" }
-func (s *SecretExportScreen) Init() tea.Cmd    { return textinput.Blink }
+func (s *SecretExportScreen) Title() string { return "Export secret" }
+func (s *SecretExportScreen) Init() tea.Cmd { return textinput.Blink }
 func (s *SecretExportScreen) HelpHint() string {
 	switch s.step {
 	case exportSelectFormat:

@@ -3,6 +3,7 @@ package screens
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -56,9 +57,9 @@ func NewSecretViewScreen(ctx *tui.AppContext, theme tui.Theme, mi *vault.MountIn
 func (s *SecretViewScreen) Title() string { return "Secret" }
 func (s *SecretViewScreen) HelpHint() string {
 	if s.version == 2 {
-		return "↑/↓ key  c copy  f export  v versions  u update  d delete  n new  esc back"
+		return "↑/↓ key  c copy  f export  v versions  u update  d delete  esc back"
 	}
-	return "↑/↓ key  c copy  f export  u update  d delete  n new  esc back"
+	return "↑/↓ key  c copy  f export  u update  d delete  esc back"
 }
 
 func (s *SecretViewScreen) Init() tea.Cmd { return s.loadCmd() }
@@ -92,6 +93,27 @@ func (s *SecretViewScreen) loadCmd() tea.Cmd {
 			}
 			subkeys, err := eng.GetSubkeys(ctx, path, 0, 1)
 			if err != nil {
+				// Fallback for tokens without permission on the
+				// kv-v2/subkeys/* endpoint: read the latest version
+				// directly so we can list keys. Plaintext is then
+				// retained in memory inside SecureStrings; the copy
+				// path will reuse it instead of fetching again.
+				if errors.Is(err, vault.ErrPermissionDenied) {
+					sec, ferr := eng.Get(ctx, path)
+					if ferr != nil {
+						return secretLoadedMsg{err: ferr}
+					}
+					keys := make([]string, 0, len(sec.Data))
+					for k := range sec.Data {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					cur := 0
+					if md, mErr := eng.GetMetadata(ctx, path); mErr == nil && md != nil {
+						cur = md.CurrentVersion
+					}
+					return secretLoadedMsg{keys: keys, secret: sec, curVersion: cur}
+				}
 				return secretLoadedMsg{err: err}
 			}
 			sort.Strings(subkeys)
@@ -167,7 +189,7 @@ func (s *SecretViewScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 	case "R":
 		s.loading = true
 		s.err = nil
-		return s, s.loadCmd()
+		return s, tea.Batch(s.loadCmd(), refreshTokenInfoCmd(s.ctx))
 	case "c":
 		return s, s.copySelected()
 	case "f":
@@ -180,9 +202,6 @@ func (s *SecretViewScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 		}
 	case "u":
 		next := NewSecretEditScreen(s.ctx, s.theme, s.mount, s.version, s.path, s.keys, false)
-		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: next} }
-	case "n":
-		next := NewSecretEditScreen(s.ctx, s.theme, s.mount, s.version, s.path, nil, true)
 		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: next} }
 	case "d":
 		return s, s.deleteFlow()

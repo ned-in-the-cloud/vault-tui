@@ -15,15 +15,16 @@ type MockClient struct {
 	caBundlePath string
 	token        string
 
-	HealthFn      func(ctx context.Context) (*HealthInfo, error)
-	LoginFn       func(ctx context.Context, method AuthMethod) (*TokenInfo, error)
-	LookupTokenFn func(ctx context.Context) (*TokenInfo, error)
-	RenewTokenFn  func(ctx context.Context, increment int) (*TokenInfo, error)
-	WatcherFn     func(increment int) (*TokenWatcher, error)
-	ListMountsFn  func(ctx context.Context) (map[string]*MountInfo, error)
-	ListKVFn      func(ctx context.Context, mount string, version int, key string) ([]string, error)
-	KVv1Fn        func(mount string) KVEngine
-	KVv2Fn        func(mount string) KVv2Engine
+	HealthFn       func(ctx context.Context) (*HealthInfo, error)
+	LoginFn        func(ctx context.Context, method AuthMethod) (*TokenInfo, error)
+	LookupTokenFn  func(ctx context.Context) (*TokenInfo, error)
+	RenewTokenFn   func(ctx context.Context, increment int) (*TokenInfo, error)
+	WatcherFn      func(increment int) (*TokenWatcher, error)
+	ListMountsFn   func(ctx context.Context) (map[string]*MountInfo, error)
+	ListKVFn       func(ctx context.Context, mount string, version int, key string) ([]string, error)
+	CapabilitiesFn func(ctx context.Context, path string) ([]string, error)
+	KVv1Fn         func(mount string) KVEngine
+	KVv2Fn         func(mount string) KVv2Engine
 }
 
 var errMockNotConfigured = errors.New("mock: function not configured")
@@ -83,6 +84,13 @@ func (m *MockClient) ListKV(ctx context.Context, mount string, version int, key 
 		return nil, errMockNotConfigured
 	}
 	return m.ListKVFn(ctx, mount, version, key)
+}
+
+func (m *MockClient) Capabilities(ctx context.Context, path string) ([]string, error) {
+	if m.CapabilitiesFn == nil {
+		return nil, errMockNotConfigured
+	}
+	return m.CapabilitiesFn(ctx, path)
 }
 
 func (m *MockClient) KVv1(mount string) KVEngine {

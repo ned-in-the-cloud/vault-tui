@@ -4,8 +4,10 @@ package tui
 // Keeping these constants centralized makes them easy to change later.
 const (
 	KeyQuit      = "ctrl+c"
+	KeyQuitAlt   = "ctrl+q"
 	KeyBack      = "esc"
 	KeyHelp      = "?"
+	KeyShowCmd   = "alt+x"
 	KeyEnter     = "enter"
 	KeyTabFwd    = "tab"
 	KeyTabBack   = "shift+tab"
