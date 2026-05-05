@@ -35,7 +35,7 @@ func NewSecretVersionsScreen(ctx *tui.AppContext, theme tui.Theme, mi *vault.Mou
 
 func (s *SecretVersionsScreen) Title() string { return "Versions" }
 func (s *SecretVersionsScreen) HelpHint() string {
-	return "↑/↓ navigate  u undelete  d delete  D destroy  R refresh  esc back"
+	return "↑/↓ navigate  r rollback  u undelete  d delete  D destroy  a delete-all  A destroy-all  R refresh  esc back"
 }
 
 func (s *SecretVersionsScreen) Init() tea.Cmd { return s.loadCmd() }
@@ -129,6 +129,23 @@ func (s *SecretVersionsScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 		return s, s.runOp(func(ctx context.Context) error {
 			return s.ctx.Vault.KVv2(strings.TrimSuffix(s.mount.Path, "/")).UndeleteVersions(ctx, s.path, []int{ver})
 		}, fmt.Sprintf("version %d undeleted", ver))
+	case "r":
+		v := s.selected()
+		if v == nil {
+			return s, nil
+		}
+		if v.Destroyed {
+			s.statusMsg = "cannot roll back from a destroyed version"
+			return s, nil
+		}
+		ver := v.Version
+		return s, PushConfirm(s.ctx, s.theme, ConfirmRequest{
+			Title:     fmt.Sprintf("Rollback to version %d", ver),
+			Body:      fmt.Sprintf("Create a new current version from %s/%s version %d?", s.mount.Path, s.path, ver),
+			Level:     components.DangerWarning,
+			Category:  ConfirmNone,
+			OnConfirm: s.rollbackCmd(ver),
+		})
 	case "d":
 		v := s.selected()
 		if v == nil {
@@ -159,8 +176,61 @@ func (s *SecretVersionsScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 				return s.ctx.Vault.KVv2(strings.TrimSuffix(s.mount.Path, "/")).DestroyVersions(ctx, s.path, []int{ver})
 			}, fmt.Sprintf("version %d destroyed", ver)),
 		})
+	case "a":
+		return s, PushConfirm(s.ctx, s.theme, ConfirmRequest{
+			Title:     "Delete all versions",
+			Body:      fmt.Sprintf("Delete all versions and metadata for %s/%s?", s.mount.Path, s.path),
+			Level:     components.DangerWarning,
+			Category:  ConfirmDeleteAll,
+			OnConfirm: s.deleteAllCmd(),
+		})
+	case "A":
+		return s, PushConfirm(s.ctx, s.theme, ConfirmRequest{
+			Title:     "Destroy all versions",
+			Body:      fmt.Sprintf("Permanently destroy all versions for %s/%s? Data is unrecoverable.", s.mount.Path, s.path),
+			Level:     components.DangerDestructive,
+			Category:  ConfirmDestroyAll,
+			OnConfirm: s.destroyAllCmd(),
+		})
 	}
 	return s, nil
+}
+
+func (s *SecretVersionsScreen) rollbackCmd(ver int) tea.Cmd {
+	return s.runOp(func(ctx context.Context) error {
+		eng := s.ctx.Vault.KVv2(strings.TrimSuffix(s.mount.Path, "/"))
+		sec, err := eng.GetVersion(ctx, s.path, ver)
+		if err != nil {
+			return err
+		}
+		if sec == nil {
+			return vault.ErrNotFound
+		}
+		defer sec.Destroy()
+		return vault.PutFromSecureV2(ctx, eng, s.path, sec.Data, nil)
+	}, fmt.Sprintf("rolled back from version %d", ver))
+}
+
+func (s *SecretVersionsScreen) deleteAllCmd() tea.Cmd {
+	return s.runOp(func(ctx context.Context) error {
+		return s.ctx.Vault.KVv2(strings.TrimSuffix(s.mount.Path, "/")).DeleteAllVersions(ctx, s.path)
+	}, "all versions deleted")
+}
+
+func (s *SecretVersionsScreen) destroyAllCmd() tea.Cmd {
+	return s.runOp(func(ctx context.Context) error {
+		eng := s.ctx.Vault.KVv2(strings.TrimSuffix(s.mount.Path, "/"))
+		versions := make([]int, 0, len(s.versions))
+		for _, v := range s.versions {
+			if !v.Destroyed {
+				versions = append(versions, v.Version)
+			}
+		}
+		if len(versions) == 0 {
+			return nil
+		}
+		return eng.DestroyVersions(ctx, s.path, versions)
+	}, "all versions destroyed")
 }
 
 func (s *SecretVersionsScreen) runOp(op func(context.Context) error, ok string) tea.Cmd {

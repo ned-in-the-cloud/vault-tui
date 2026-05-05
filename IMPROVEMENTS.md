@@ -12,7 +12,7 @@ Legend:
 - [x] Finish namespace switching so changing the namespace immediately refreshes the current screen state.
 - [x] Implement expired-token recovery and stack-preserving re-auth.
 - [x] Add the settings/help/error-display polish layer from Phase 6.
-- [ ] Implement rollback, delete-all, and destroy-all version workflows.
+- [x] Implement rollback, delete-all, and destroy-all version workflows.
 - [ ] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
 
 ## Completed In This Commit Batch
@@ -23,6 +23,7 @@ Legend:
 - [x] Add capability probing to gate secret creation actions in the path browser.
 - [x] Refresh token status-bar info alongside screen reload flows.
 - [x] Update KV v2 patch behavior to use read-write merge semantics for broader policy compatibility.
+- [x] Add rollback plus delete-all and destroy-all version workflows to the KV v2 versions screen.
 
 ## Phase 1: Scaffolding, Connection, and Authentication
 
@@ -88,8 +89,8 @@ Legend:
 - [x] Require typing `DESTROY` for destructive confirmation flows.
 - [x] Implement v1 permanent delete confirmation.
 - [x] Implement v2 current-version delete confirmation.
-- [ ] Implement rollback action from the versions screen.
-- [ ] Implement delete-all-versions and destroy-all UI flows.
+- [x] Implement rollback action from the versions screen.
+- [x] Implement delete-all-versions and destroy-all UI flows.
 - [ ] Implement CAS controls in the edit UI when mounts require check-and-set.
 - [ ] Add explicit tests for no-plaintext screen rendering and broader end-to-end TUI secret workflows.
 
@@ -109,6 +110,5 @@ Legend:
 
 ## Next Recommended Slice
 
-- [ ] Implement rollback, delete-all, and destroy-all version workflows.
 - [ ] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
 - [ ] Preserve in-progress edit state across the planned re-auth flow.
