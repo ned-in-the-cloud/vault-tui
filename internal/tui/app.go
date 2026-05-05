@@ -19,9 +19,16 @@ type rootModel struct {
 	width       int
 	height      int
 	lastErr     error
+	appErr      *appErrorState
 	quitting    bool
 	tokenInfo   *vault.TokenInfo // most recent token info for status bar
 	showCommand bool             // toggled by KeyShowCmd
+	showHelp    bool             // toggled by KeyHelp
+}
+
+type appErrorState struct {
+	err     error
+	actions []ErrorAction
 }
 
 // NewRoot constructs the root tea.Model with the supplied initial screen.
@@ -53,10 +60,29 @@ func (r *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.height = m.Height
 
 	case tea.KeyPressMsg:
+		if r.appErr != nil {
+			switch m.String() {
+			case "esc", "c":
+				r.appErr = nil
+				return r, nil
+			}
+			for _, a := range r.appErr.actions {
+				if strings.EqualFold(m.String(), a.Key) {
+					r.appErr = nil
+					if a.Cmd != nil {
+						return r, a.Cmd
+					}
+					return r, nil
+				}
+			}
+		}
 		switch m.String() {
 		case KeyQuit, KeyQuitAlt:
 			r.quitting = true
 			return r, tea.Quit
+		case KeyHelp:
+			r.showHelp = !r.showHelp
+			return r, nil
 		case KeyShowCmd:
 			// alt+x is reserved as a global toggle for the equivalent
 			// Vault CLI command overlay. It is not produced by typing
@@ -95,8 +121,12 @@ func (r *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errorMsg:
 		r.lastErr = m.err
 		return r, nil
+	case appErrorMsg:
+		r.appErr = &appErrorState{err: m.err, actions: m.actions}
+		return r, nil
 	case ClearErrorMsg:
 		r.lastErr = nil
+		r.appErr = nil
 		return r, nil
 	case TokenInfoMsg:
 		r.tokenInfo = m.Info
@@ -155,13 +185,67 @@ func (r *rootModel) View() tea.View {
 	view := lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		"",
-		body,
+		r.mainBody(cur, body),
 		"",
 		cmdLine+errLine+status,
 	)
 	v := tea.NewView(view)
 	v.AltScreen = true
 	return v
+}
+
+func (r *rootModel) mainBody(cur Screen, body string) string {
+	out := body
+	if r.showHelp {
+		help := r.helpPanel(cur)
+		out = lipgloss.JoinVertical(lipgloss.Left, out, "", help)
+	}
+	if r.appErr != nil {
+		errOverlay := r.errorOverlay()
+		out = lipgloss.JoinVertical(lipgloss.Left, out, "", errOverlay)
+	}
+	return out
+}
+
+func (r *rootModel) helpPanel(cur Screen) string {
+	hint := ""
+	if hh, ok := cur.(HelpHinter); ok {
+		hint = hh.HelpHint()
+	}
+	var b strings.Builder
+	b.WriteString(r.theme.Subtitle.Render("Help"))
+	b.WriteString("\n\n")
+	b.WriteString("Global:\n")
+	b.WriteString("  ctrl+c / ctrl+q   quit\n")
+	b.WriteString("  esc               back\n")
+	b.WriteString("  ?                 toggle help\n")
+	b.WriteString("  alt+x             toggle command overlay\n")
+	if hint != "" {
+		b.WriteString("\nCurrent screen:\n")
+		b.WriteString("  " + hint + "\n")
+	}
+	return r.theme.Box.Render(strings.TrimRight(b.String(), "\n"))
+}
+
+func (r *rootModel) errorOverlay() string {
+	if r.appErr == nil || r.appErr.err == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(r.theme.Error.Render("Error: " + r.appErr.err.Error()))
+	b.WriteString("\n")
+	if len(r.appErr.actions) > 0 {
+		b.WriteString("Actions: ")
+		parts := make([]string, 0, len(r.appErr.actions)+1)
+		for _, a := range r.appErr.actions {
+			parts = append(parts, "["+a.Key+"] "+a.Label)
+		}
+		parts = append(parts, "[esc] dismiss")
+		b.WriteString(strings.Join(parts, "  "))
+	} else {
+		b.WriteString("Press esc to dismiss")
+	}
+	return r.theme.Box.Render(strings.TrimRight(b.String(), "\n"))
 }
 
 func (r *rootModel) statusBar() string {
@@ -187,9 +271,29 @@ func (r *rootModel) statusBar() string {
 // global error line.
 type errorMsg struct{ err error }
 
+// ErrorAction is an optional action rendered on the global error overlay.
+// Pressing Key executes Cmd.
+type ErrorAction struct {
+	Key   string
+	Label string
+	Cmd   tea.Cmd
+}
+
+type appErrorMsg struct {
+	err     error
+	actions []ErrorAction
+}
+
 // ShowError returns a tea.Cmd that posts an errorMsg.
 func ShowError(err error) tea.Cmd {
 	return func() tea.Msg { return errorMsg{err: err} }
+}
+
+// ShowAppError renders a dedicated error overlay with optional actions.
+func ShowAppError(err error, actions ...ErrorAction) tea.Cmd {
+	return func() tea.Msg {
+		return appErrorMsg{err: err, actions: actions}
+	}
 }
 
 // ClearErrorMsg clears the global error overlay.

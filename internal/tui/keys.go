@@ -19,4 +19,5 @@ const (
 	KeyAutoRenew = "a"
 	KeyTokenView = "t"
 	KeyEngines   = "e"
+	KeySettings  = "s"
 )

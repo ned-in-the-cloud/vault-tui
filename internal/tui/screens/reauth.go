@@ -13,10 +13,29 @@ import (
 // screen when the supplied error indicates an expired/invalid token.
 // Returns nil for all non-token errors.
 func pushReauthIfInvalidToken(ctx *tui.AppContext, theme tui.Theme, err error) tea.Cmd {
-	if !errors.Is(err, vault.ErrInvalidToken) {
-		return nil
+	if errors.Is(err, vault.ErrInvalidToken) {
+		reauth := func() tea.Msg { return tui.PushScreenMsg{Screen: NewReauthScreen(ctx, theme)} }
+		return tea.Batch(
+			reauth,
+			tui.ShowAppError(err, tui.ErrorAction{
+				Key:   "a",
+				Label: "re-authenticate",
+				Cmd:   reauth,
+			}),
+		)
 	}
-	return func() tea.Msg {
-		return tui.PushScreenMsg{Screen: NewReauthScreen(ctx, theme)}
+	if errors.Is(err, vault.ErrConnectionFailed) {
+		reconnect := func() tea.Msg {
+			return tui.ReplaceScreenMsg{Screen: NewConnectScreen(ctx, theme)}
+		}
+		return tui.ShowAppError(err, tui.ErrorAction{
+			Key:   "r",
+			Label: "reconnect",
+			Cmd:   reconnect,
+		})
 	}
+	if err != nil {
+		return tui.ShowAppError(err)
+	}
+	return nil
 }

@@ -11,7 +11,7 @@ Legend:
 
 - [x] Finish namespace switching so changing the namespace immediately refreshes the current screen state.
 - [x] Implement expired-token recovery and stack-preserving re-auth.
-- [ ] Add the settings/help/error-display polish layer from Phase 6.
+- [x] Add the settings/help/error-display polish layer from Phase 6.
 - [ ] Implement rollback, delete-all, and destroy-all version workflows.
 - [ ] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
 
@@ -95,10 +95,10 @@ Legend:
 
 ## Phase 6: Polish and Extensibility
 
-- [ ] Implement context-sensitive help component.
-- [ ] Implement settings screen for masking, clipboard, auto-renew, export defaults, persistence mode, confirmation reset, and history clearing.
+- [x] Implement context-sensitive help component.
+- [x] Implement settings screen for masking, clipboard, auto-renew, export defaults, persistence mode, confirmation reset, and history clearing.
 - [x] Implement token-expiry recovery that pushes auth on `ErrInvalidToken` and returns to the interrupted screen after re-auth.
-- [ ] Implement a dedicated error overlay/toast with reconnect and re-auth actions.
+- [x] Implement a dedicated error overlay/toast with reconnect and re-auth actions.
 - [ ] Preserve in-progress edit state across the planned re-auth flow.
 
 ## Improvements
@@ -109,4 +109,6 @@ Legend:
 
 ## Next Recommended Slice
 
-- [ ] Add the settings/help/error-display polish layer from Phase 6.
+- [ ] Implement rollback, delete-all, and destroy-all version workflows.
+- [ ] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
+- [ ] Preserve in-progress edit state across the planned re-auth flow.

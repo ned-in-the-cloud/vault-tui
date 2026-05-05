@@ -48,6 +48,7 @@ type dashboardMenuItem struct {
 var dashboardMenu = []dashboardMenuItem{
 	{tui.KeyEngines, "Secrets Engines", "Browse KV mounts and secrets"},
 	{tui.KeyTokenView, "Token Details", "Renew, inspect, or rotate the active token"},
+	{tui.KeySettings, "Settings", "Preferences, defaults, and history controls"},
 	{"q", "Quit", "Exit vault-tui"},
 }
 
@@ -59,7 +60,7 @@ func NewDashboardScreen(ctx *tui.AppContext, theme tui.Theme, token *vault.Token
 func (s *DashboardScreen) Title() string { return "Dashboard" }
 
 func (s *DashboardScreen) HelpHint() string {
-	return "↑/↓ select  enter open  N namespace  r renew  a auto-renew  q quit"
+	return "↑/↓ select  enter open  N namespace  r renew  a auto-renew  s settings  q quit"
 }
 
 func (s *DashboardScreen) Init() tea.Cmd {
@@ -149,7 +150,7 @@ func (s *DashboardScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 		}
 	case "enter":
 		return s.activateMenuByKey(dashboardMenu[s.menuIdx].key)
-	case tui.KeyEngines, tui.KeyTokenView:
+	case tui.KeyEngines, tui.KeyTokenView, tui.KeySettings:
 		return s.activateMenuByKey(key)
 	case "q":
 		return s, tea.Quit
@@ -177,6 +178,9 @@ func (s *DashboardScreen) activateMenuByKey(key string) (tui.Screen, tea.Cmd) {
 	case tui.KeyEngines:
 		el := NewEngineListScreen(s.ctx, s.theme)
 		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: el} }
+	case tui.KeySettings:
+		ss := NewSettingsScreen(s.ctx, s.theme)
+		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: ss} }
 	case "q":
 		return s, tea.Quit
 	}
