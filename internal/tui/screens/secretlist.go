@@ -2,6 +2,7 @@ package screens
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -56,7 +57,7 @@ func (s *SecretListScreen) HelpHint() string {
 	if s.canCreate {
 		parts = append(parts, "n new")
 	}
-	parts = append(parts, "backspace up", "/ filter", "R refresh", "esc back")
+	parts = append(parts, "p direct-path", "backspace up", "/ filter", "R refresh", "esc back")
 	return strings.Join(parts, "  ")
 }
 
@@ -143,9 +144,23 @@ func (s *SecretListScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		s.loading = false
 		s.err = m.err
 		if m.err != nil {
+			if errors.Is(m.err, vault.ErrPermissionDenied) {
+				s.keys = nil
+				s.filtered = nil
+				s.canCreate = false
+				return s, tui.ShowAppError(m.err, tui.ErrorAction{
+					Key:   "p",
+					Label: "direct path",
+					Cmd:   s.openDirectPathPromptCmd(),
+				})
+			}
 			if cmd := pushReauthIfInvalidToken(s.ctx, s.theme, m.err); cmd != nil {
 				return s, cmd
 			}
+			s.keys = nil
+			s.filtered = nil
+			s.canCreate = false
+			return s, nil
 		}
 		s.keys = m.keys
 		s.idx = 0
@@ -213,6 +228,8 @@ func (s *SecretListScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 		}
 		next := NewSecretEditScreen(s.ctx, s.theme, s.mount, s.version, parent, nil, true)
 		return s, func() tea.Msg { return tui.PushScreenMsg{Screen: next} }
+	case "p":
+		return s, s.openDirectPathPromptCmd()
 	case "R":
 		s.loading = true
 		s.err = nil
@@ -227,6 +244,11 @@ func (s *SecretListScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 		return s, nil
 	}
 	return s, nil
+}
+
+func (s *SecretListScreen) openDirectPathPromptCmd() tea.Cmd {
+	next := NewSecretDirectPathPrompt(s.ctx, s.theme, s.mount, s.version, s.path)
+	return func() tea.Msg { return tui.PushScreenMsg{Screen: next} }
 }
 
 func (s *SecretListScreen) applyFilter() {

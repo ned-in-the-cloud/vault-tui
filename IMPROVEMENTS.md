@@ -26,6 +26,7 @@ Legend:
 - [x] Add rollback plus delete-all and destroy-all version workflows to the KV v2 versions screen.
 - [x] Replace dashboard threshold-based auto-renew with a root watcher-driven token renewal flow.
 - [x] Preserve in-progress secret edit values when save fails with invalid token and re-auth is required.
+- [x] Add direct-path recovery for permission-denied secret browsing errors.
 
 ## Phase 1: Scaffolding, Connection, and Authentication
 
@@ -63,7 +64,7 @@ Legend:
 - [x] Implement breadcrumb component for KV navigation.
 - [x] Implement create-secret entry from the current path when the token has create/update capability.
 - [x] Implement refresh behavior for mount and secret lists.
-- [ ] Implement the planned direct-path recovery flow for permission-denied browsing errors.
+- [x] Implement the planned direct-path recovery flow for permission-denied browsing errors.
 - [x] Complete namespace-switch reload behavior after the prompt closes.
 
 ## Phase 4: KV Engine Interface Layer
@@ -112,6 +113,5 @@ Legend:
 
 ## Next Recommended Slice
 
-- [ ] Implement the planned direct-path recovery flow for permission-denied browsing errors.
 - [ ] Implement CAS controls in the edit UI when mounts require check-and-set.
 - [ ] Add explicit tests for no-plaintext screen rendering and broader end-to-end TUI secret workflows.
