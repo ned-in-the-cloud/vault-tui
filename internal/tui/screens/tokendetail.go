@@ -57,6 +57,7 @@ func (s *TokenDetailScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 			s.ctx.Config.AutoRenewToken = !s.ctx.Config.AutoRenewToken
 			s.ctx.SaveConfig()
 			s.lastMsg = fmt.Sprintf("auto-renew %v", s.ctx.Config.AutoRenewToken)
+			return s, tui.AutoRenewChanged()
 		}
 	case dashboardTickMsg:
 		return s, tickCmd()
@@ -73,6 +74,9 @@ func (s *TokenDetailScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		s.lastErr = nil
 		s.lastMsg = "token renewed"
 		return s, s.publishToken()
+	case tui.TokenInfoMsg:
+		s.token = m.Info
+		return s, nil
 	}
 	return s, nil
 }

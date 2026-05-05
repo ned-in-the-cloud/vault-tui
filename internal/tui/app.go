@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -24,6 +27,11 @@ type rootModel struct {
 	tokenInfo   *vault.TokenInfo // most recent token info for status bar
 	showCommand bool             // toggled by KeyShowCmd
 	showHelp    bool             // toggled by KeyHelp
+
+	watcher         *vault.TokenWatcher
+	watcherEvents   <-chan vault.WatchEvent
+	watcherCancel   context.CancelFunc
+	watcherAccessor string
 }
 
 type appErrorState struct {
@@ -54,6 +62,7 @@ func (r *rootModel) Init() tea.Cmd {
 }
 
 func (r *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var rootCmd tea.Cmd
 	switch m := msg.(type) {
 	case tea.WindowSizeMsg:
 		r.width = m.Width
@@ -78,6 +87,7 @@ func (r *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch m.String() {
 		case KeyQuit, KeyQuitAlt:
+			r.stopWatcher()
 			r.quitting = true
 			return r, tea.Quit
 		case KeyHelp:
@@ -116,6 +126,7 @@ func (r *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.stack.Replace(m.Screen)
 		return r, m.Screen.Init()
 	case QuitMsg:
+		r.stopWatcher()
 		r.quitting = true
 		return r, tea.Quit
 	case errorMsg:
@@ -130,17 +141,99 @@ func (r *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return r, nil
 	case TokenInfoMsg:
 		r.tokenInfo = m.Info
-		return r, nil
+		rootCmd = r.reconcileWatcher()
+	case autoRenewChangedMsg:
+		rootCmd = r.reconcileWatcher()
+		return r, rootCmd
+	case tokenWatchEventMsg:
+		if !m.ok {
+			r.stopWatcher()
+			return r, nil
+		}
+		if m.event.Renewed != nil {
+			return r, tea.Batch(r.waitForWatchEventCmd(), r.lookupTokenCmd())
+		}
+		if m.event.Done {
+			if m.event.Err != nil {
+				r.lastErr = fmt.Errorf("auto-renew: %w", m.event.Err)
+			}
+			r.stopWatcher()
+			return r, nil
+		}
+		return r, r.waitForWatchEventCmd()
+	case tokenLookupMsg:
+		if m.err != nil {
+			r.lastErr = fmt.Errorf("auto-renew lookup: %w", m.err)
+			return r, nil
+		}
+		r.tokenInfo = m.info
+		return r, func() tea.Msg { return TokenInfoMsg{Info: m.info} }
 	}
 
 	cur := r.stack.Current()
 	if cur == nil {
-		return r, nil
+		return r, rootCmd
 	}
 	next, cmd := cur.Update(msg)
 	// Replace current with next (screens may return updated copies).
 	r.stack.stack[len(r.stack.stack)-1] = next
-	return r, cmd
+	return r, tea.Batch(rootCmd, cmd)
+}
+
+func (r *rootModel) reconcileWatcher() tea.Cmd {
+	if r.tokenInfo == nil || !r.tokenInfo.Renewable || !r.ctx.Config.AutoRenewToken {
+		r.stopWatcher()
+		return nil
+	}
+	if r.watcher != nil && r.watcherAccessor == r.tokenInfo.Accessor {
+		return nil
+	}
+	r.stopWatcher()
+	watcher, err := r.ctx.Vault.NewTokenWatcher(0)
+	if err != nil {
+		r.lastErr = fmt.Errorf("start auto-renew watcher: %w", err)
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.watcher = watcher
+	r.watcherCancel = cancel
+	r.watcherEvents = watcher.Run(ctx)
+	r.watcherAccessor = r.tokenInfo.Accessor
+	return r.waitForWatchEventCmd()
+}
+
+func (r *rootModel) stopWatcher() {
+	if r.watcherCancel != nil {
+		r.watcherCancel()
+		r.watcherCancel = nil
+	}
+	if r.watcher != nil {
+		r.watcher.Stop()
+		r.watcher = nil
+	}
+	r.watcherEvents = nil
+	r.watcherAccessor = ""
+}
+
+func (r *rootModel) waitForWatchEventCmd() tea.Cmd {
+	ch := r.watcherEvents
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		evt, ok := <-ch
+		return tokenWatchEventMsg{event: evt, ok: ok}
+	}
+}
+
+func (r *rootModel) lookupTokenCmd() tea.Cmd {
+	vc := r.ctx.Vault
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		ti, err := vc.LookupToken(ctx)
+		return tokenLookupMsg{info: ti, err: err}
+	}
 }
 
 func (r *rootModel) View() tea.View {
@@ -282,6 +375,23 @@ type ErrorAction struct {
 type appErrorMsg struct {
 	err     error
 	actions []ErrorAction
+}
+
+type tokenWatchEventMsg struct {
+	event vault.WatchEvent
+	ok    bool
+}
+
+type tokenLookupMsg struct {
+	info *vault.TokenInfo
+	err  error
+}
+
+type autoRenewChangedMsg struct{}
+
+// AutoRenewChanged notifies the root model that AutoRenewToken was toggled.
+func AutoRenewChanged() tea.Cmd {
+	return func() tea.Msg { return autoRenewChangedMsg{} }
 }
 
 // ShowError returns a tea.Cmd that posts an errorMsg.

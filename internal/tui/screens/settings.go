@@ -137,6 +137,7 @@ func (s *SettingsScreen) adjustCurrent(delta int) (tui.Screen, tea.Cmd) {
 		s.ctx.Config.AutoRenewToken = !s.ctx.Config.AutoRenewToken
 		s.ctx.SaveConfig()
 		s.status = "auto-renew preference updated"
+		return s, tui.AutoRenewChanged()
 	case fieldExportFormat:
 		formats := []config.ExportFormat{
 			config.ExportFormatJSON,

@@ -19,10 +19,6 @@ const tickInterval = time.Second
 // refreshInterval is how often the dashboard re-fetches token info.
 const refreshInterval = 30 * time.Second
 
-// autoRenewThreshold: when AutoRenewToken is on, fire a renew once the
-// remaining TTL drops below this duration.
-const autoRenewThreshold = 60 * time.Second
-
 // DashboardScreen is the post-auth landing screen with three panels
 // (server / token / navigation), a TTL countdown via tea.Tick, and
 // hotkeys for namespace switch, manual renew, and auto-renew toggle.
@@ -32,11 +28,10 @@ type DashboardScreen struct {
 	token  *vault.TokenInfo
 	health *vault.HealthInfo
 
-	menuIdx     int
-	renewing    bool
-	refreshing  bool
-	lastErr     error
-	autoRenewed time.Time
+	menuIdx    int
+	renewing   bool
+	refreshing bool
+	lastErr    error
 }
 
 type dashboardMenuItem struct {
@@ -100,12 +95,7 @@ func (s *DashboardScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		return s.handleKey(m.String())
 
 	case dashboardTickMsg:
-		var cmds []tea.Cmd
-		cmds = append(cmds, tickCmd())
-		if cmd := s.maybeAutoRenew(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		return s, tea.Batch(cmds...)
+		return s, tickCmd()
 
 	case dashboardRefreshMsg:
 		return s, tea.Batch(refreshCmd(), s.refreshTokenCmd())
@@ -134,6 +124,10 @@ func (s *DashboardScreen) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		s.token = m.info
 		s.lastErr = nil
 		return s, s.publishToken()
+
+	case tui.TokenInfoMsg:
+		s.token = m.Info
+		return s, nil
 	}
 	return s, nil
 }
@@ -166,6 +160,7 @@ func (s *DashboardScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 	case tui.KeyAutoRenew:
 		s.ctx.Config.AutoRenewToken = !s.ctx.Config.AutoRenewToken
 		s.ctx.SaveConfig()
+		return s, tui.AutoRenewChanged()
 	}
 	return s, nil
 }
@@ -213,26 +208,6 @@ func (s *DashboardScreen) refreshTokenCmd() tea.Cmd {
 		ti, err := vc.LookupToken(ctx)
 		return tokenRefreshedMsg{info: ti, err: err}
 	}
-}
-
-func (s *DashboardScreen) maybeAutoRenew() tea.Cmd {
-	if !s.ctx.Config.AutoRenewToken || s.token == nil || !s.token.Renewable {
-		return nil
-	}
-	if s.renewing {
-		return nil
-	}
-	if s.token.ExpireTime.IsZero() {
-		return nil
-	}
-	if time.Until(s.token.ExpireTime) > autoRenewThreshold {
-		return nil
-	}
-	if time.Since(s.autoRenewed) < 30*time.Second {
-		return nil
-	}
-	s.autoRenewed = time.Now()
-	return s.renewCmd()
 }
 
 // --- view ---

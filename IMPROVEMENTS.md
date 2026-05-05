@@ -13,7 +13,7 @@ Legend:
 - [x] Implement expired-token recovery and stack-preserving re-auth.
 - [x] Add the settings/help/error-display polish layer from Phase 6.
 - [x] Implement rollback, delete-all, and destroy-all version workflows.
-- [ ] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
+- [x] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
 
 ## Completed In This Commit Batch
 
@@ -24,6 +24,7 @@ Legend:
 - [x] Refresh token status-bar info alongside screen reload flows.
 - [x] Update KV v2 patch behavior to use read-write merge semantics for broader policy compatibility.
 - [x] Add rollback plus delete-all and destroy-all version workflows to the KV v2 versions screen.
+- [x] Replace dashboard threshold-based auto-renew with a root watcher-driven token renewal flow.
 
 ## Phase 1: Scaffolding, Connection, and Authentication
 
@@ -51,7 +52,7 @@ Legend:
 - [x] Implement manual token renewal.
 - [x] Implement auto-renew toggle and renewal behavior.
 - [x] Implement token detail screen with expanded token metadata.
-- [ ] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
+- [x] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
 
 ## Phase 3: Secrets Engine Listing and KV Path Browsing
 
@@ -110,5 +111,4 @@ Legend:
 
 ## Next Recommended Slice
 
-- [ ] Replace the current lightweight renewal loop with the full watcher-driven message flow described in the plan.
 - [ ] Preserve in-progress edit state across the planned re-auth flow.
