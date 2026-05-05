@@ -41,6 +41,14 @@ func (p *namespacePrompt) HelpHint() string {
 	return "enter accept  esc cancel"
 }
 
+// namespaceChangedMsg is published by the namespace prompt when the
+// user accepts a new namespace; screens that depend on namespace-scoped
+// data can listen for it and reload.
+type namespaceChangedMsg struct {
+	Previous string
+	Current  string
+}
+
 func (p *namespacePrompt) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	if km, ok := msg.(tea.KeyPressMsg); ok {
 		switch km.String() {
@@ -48,7 +56,15 @@ func (p *namespacePrompt) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 			ns := strings.TrimSpace(p.input.Value())
 			p.ctx.Vault.SetNamespace(ns)
 			p.ctx.Logger.Info("namespace switched", "from", p.current, "to", ns)
-			return p, func() tea.Msg { return tui.PopScreenMsg{} }
+			if ns == p.current {
+				return p, func() tea.Msg { return tui.PopScreenMsg{} }
+			}
+			return p, tea.Sequence(
+				func() tea.Msg { return tui.PopScreenMsg{} },
+				func() tea.Msg {
+					return namespaceChangedMsg{Previous: p.current, Current: ns}
+				},
+			)
 		}
 	}
 	var cmd tea.Cmd

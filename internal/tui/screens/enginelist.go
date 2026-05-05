@@ -114,7 +114,7 @@ func (s *EngineListScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 	case "R":
 		s.loading = true
 		s.err = nil
-		return s, s.loadCmd()
+		return s, tea.Batch(s.loadCmd(), refreshTokenInfoCmd(s.ctx))
 	case tui.KeyNamespace:
 		return s, func() tea.Msg {
 			return tui.PushScreenMsg{Screen: NewNamespacePrompt(s.ctx, s.theme)}
@@ -122,11 +122,6 @@ func (s *EngineListScreen) handleKey(key string) (tui.Screen, tea.Cmd) {
 	}
 	return s, nil
 }
-
-// namespaceChangedMsg is published by the namespace prompt when the
-// user accepts a new namespace; engine list listens for it to reload.
-type namespaceChangedMsg struct{}
-
 func (s *EngineListScreen) View() string {
 	var b strings.Builder
 	b.WriteString(s.theme.Subtitle.Render("Secrets engines"))
