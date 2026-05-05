@@ -310,8 +310,6 @@ func (s *SecretEditScreen) submit() (tui.Screen, tea.Cmd) {
 			return s, nil
 		}
 		data[k] = secure.NewSecureString(jsonBytes)
-		// Zero the textinput value now that it is wrapped.
-		s.pairs[i].value.SetValue("")
 	}
 	if len(data) == 0 {
 		s.err = fmt.Errorf("at least one key is required")

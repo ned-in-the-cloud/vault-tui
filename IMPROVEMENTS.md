@@ -25,6 +25,7 @@ Legend:
 - [x] Update KV v2 patch behavior to use read-write merge semantics for broader policy compatibility.
 - [x] Add rollback plus delete-all and destroy-all version workflows to the KV v2 versions screen.
 - [x] Replace dashboard threshold-based auto-renew with a root watcher-driven token renewal flow.
+- [x] Preserve in-progress secret edit values when save fails with invalid token and re-auth is required.
 
 ## Phase 1: Scaffolding, Connection, and Authentication
 
@@ -101,7 +102,7 @@ Legend:
 - [x] Implement settings screen for masking, clipboard, auto-renew, export defaults, persistence mode, confirmation reset, and history clearing.
 - [x] Implement token-expiry recovery that pushes auth on `ErrInvalidToken` and returns to the interrupted screen after re-auth.
 - [x] Implement a dedicated error overlay/toast with reconnect and re-auth actions.
-- [ ] Preserve in-progress edit state across the planned re-auth flow.
+- [x] Preserve in-progress edit state across the planned re-auth flow.
 
 ## Improvements
 
@@ -111,4 +112,6 @@ Legend:
 
 ## Next Recommended Slice
 
-- [ ] Preserve in-progress edit state across the planned re-auth flow.
+- [ ] Implement the planned direct-path recovery flow for permission-denied browsing errors.
+- [ ] Implement CAS controls in the edit UI when mounts require check-and-set.
+- [ ] Add explicit tests for no-plaintext screen rendering and broader end-to-end TUI secret workflows.
