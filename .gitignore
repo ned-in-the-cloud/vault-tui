@@ -2,7 +2,7 @@
 bin/
 build/
 dist/
-vault-tui
+/vault-tui
 *.exe
 *.exe~
 *.dll
