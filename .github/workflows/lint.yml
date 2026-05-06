@@ -1,5 +1,8 @@
 name: Lint
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: ["main"]
@@ -34,7 +37,7 @@ jobs:
       # set above, avoiding "language version too old" errors when go.mod
       # targets a newer toolchain than the latest golangci-lint release binary.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           install-mode: goinstall
