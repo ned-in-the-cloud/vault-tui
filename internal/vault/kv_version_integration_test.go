@@ -5,11 +5,19 @@ package vault_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ned1313/vault-tui/internal/vault"
 )
+
+func integrationKVPath(t *testing.T, name string) string {
+	t.Helper()
+	replacer := strings.NewReplacer("/", "-", " ", "-")
+	return fmt.Sprintf("vault-tui-itest/%s-%d", replacer.Replace(name), time.Now().UnixNano())
+}
 
 func TestIntegrationKVv2VersionLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -26,7 +34,7 @@ func TestIntegrationKVv2VersionLifecycle(t *testing.T) {
 	}
 
 	e := c.KVv2(mount)
-	path := "vault-tui-itest/version-lifecycle"
+	path := integrationKVPath(t, t.Name())
 	defer e.DeleteAllVersions(ctx, path)
 
 	if err := e.Put(ctx, path, map[string]interface{}{"k": "v1"}); err != nil {
@@ -119,7 +127,7 @@ func TestIntegrationKVv2RollbackCreatesNewCurrentVersion(t *testing.T) {
 	}
 
 	e := c.KVv2(mount)
-	path := "vault-tui-itest/rollback"
+	path := integrationKVPath(t, t.Name())
 	defer e.DeleteAllVersions(ctx, path)
 
 	if err := e.Put(ctx, path, map[string]interface{}{"k": "v1"}); err != nil {
@@ -179,7 +187,7 @@ func TestIntegrationKVv2DeleteAllRemovesMetadata(t *testing.T) {
 	}
 
 	e := c.KVv2(mount)
-	path := "vault-tui-itest/delete-all"
+	path := integrationKVPath(t, t.Name())
 	defer e.DeleteAllVersions(ctx, path)
 
 	if err := e.Put(ctx, path, map[string]interface{}{"k": "v1"}); err != nil {

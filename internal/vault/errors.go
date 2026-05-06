@@ -50,6 +50,9 @@ func classifyError(err error) error {
 	// values. We treat any non-ResponseError that mentions a network verb
 	// as a connection failure.
 	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "secret not found") || strings.Contains(msg, "no metadata") {
+		return fmt.Errorf("%w: %v", ErrNotFound, err)
+	}
 	if strings.Contains(msg, "no such host") ||
 		strings.Contains(msg, "connection refused") ||
 		strings.Contains(msg, "tls") ||
