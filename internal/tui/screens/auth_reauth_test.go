@@ -31,7 +31,7 @@ func testAuthContext(t *testing.T) *tui.AppContext {
 		ConfigPath: filepath.Join(t.TempDir(), "config.json"),
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
-	ctx.Vault.SetAddress("https://vault.example")
+	_ = ctx.Vault.SetAddress("https://vault.example")
 	return ctx
 }
 

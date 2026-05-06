@@ -60,7 +60,7 @@ func editTestContext(kv vault.KVv2Engine) *tui.AppContext {
 			return kv
 		}},
 	}
-	ctx.Vault.SetAddress("https://vault.example")
+	_ = ctx.Vault.SetAddress("https://vault.example")
 	return ctx
 }
 
