@@ -54,14 +54,16 @@ func (s *SecretVersionsScreen) loadCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		eng := vc.KVv2(mount)
+		versions, err := eng.GetVersionsList(ctx, path)
+		if err != nil {
+			return versionsLoadedMsg{err: err}
+		}
 		md, err := eng.GetMetadata(ctx, path)
 		if err != nil {
 			return versionsLoadedMsg{err: err}
 		}
-		out := make([]vault.KVVersionMeta, 0, len(md.Versions))
-		for _, v := range md.Versions {
-			out = append(out, v)
-		}
+		out := make([]vault.KVVersionMeta, len(versions))
+		copy(out, versions)
 		sort.Slice(out, func(i, j int) bool { return out[i].Version > out[j].Version })
 		return versionsLoadedMsg{versions: out, curVersion: md.CurrentVersion}
 	}
@@ -268,7 +270,7 @@ func (s *SecretVersionsScreen) View() string {
 		b.WriteString(s.theme.Hint.Render("(no versions)"))
 		return b.String()
 	}
-	header := fmt.Sprintf("  %-7s %-25s %-12s", "version", "created", "status")
+	header := fmt.Sprintf("  %-7s %-19s %-19s %-12s", "version", "created", "deleted", "status")
 	b.WriteString(s.theme.Hint.Render(header))
 	b.WriteString("\n")
 	for i, v := range s.versions {
@@ -285,9 +287,14 @@ func (s *SecretVersionsScreen) View() string {
 		if v.Version == s.curVersion && status == "Active" {
 			status = "Current"
 		}
-		line := fmt.Sprintf("%s%-7d %-25s %-12s", marker,
+		deletedAt := "-"
+		if !v.DeletionTime.IsZero() {
+			deletedAt = v.DeletionTime.Local().Format("2006-01-02 15:04:05")
+		}
+		line := fmt.Sprintf("%s%-7d %-19s %-19s %-12s", marker,
 			v.Version,
 			v.CreatedTime.Local().Format("2006-01-02 15:04:05"),
+			deletedAt,
 			status,
 		)
 		if i == s.idx {

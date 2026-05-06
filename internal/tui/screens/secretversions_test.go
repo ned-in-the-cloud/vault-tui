@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -18,6 +19,10 @@ type fakeVersionsKVv2 struct {
 	getVersionErr      error
 	getVersionCalled   int
 	getVersionArg      int
+	versionsList       []vault.KVVersionMeta
+	versionsListErr    error
+	metadata           *vault.KVMetadata
+	metadataErr        error
 	deleteAllCalled    bool
 	destroyCalled      bool
 	destroyArgVersions []int
@@ -42,10 +47,10 @@ func (f *fakeVersionsKVv2) GetVersion(_ context.Context, _ string, version int) 
 	return f.getVersionResult, f.getVersionErr
 }
 func (f *fakeVersionsKVv2) GetVersionsList(context.Context, string) ([]vault.KVVersionMeta, error) {
-	return nil, nil
+	return f.versionsList, f.versionsListErr
 }
 func (f *fakeVersionsKVv2) GetMetadata(context.Context, string) (*vault.KVMetadata, error) {
-	return nil, nil
+	return f.metadata, f.metadataErr
 }
 func (f *fakeVersionsKVv2) GetSubkeys(context.Context, string, int, int) ([]string, error) {
 	return nil, nil
@@ -190,6 +195,48 @@ func TestSecretVersionsRollbackDisallowsDestroyedSelection(t *testing.T) {
 	if s.statusMsg == "" {
 		t.Fatalf("expected status message")
 	}
+}
+
+func TestSecretVersionsLoadCmdUsesVersionsListAndCurrentVersion(t *testing.T) {
+	fakeKV := &fakeVersionsKVv2{
+		versionsList: []vault.KVVersionMeta{
+			{Version: 1},
+			{Version: 3, DeletionTime: mustParseTime(t, "2026-05-06T10:00:00Z")},
+			{Version: 2},
+		},
+		metadata: &vault.KVMetadata{CurrentVersion: 2},
+	}
+	s := testVersionsScreen(fakeKV, nil)
+
+	msg := s.loadCmd()()
+	loaded, ok := msg.(versionsLoadedMsg)
+	if !ok {
+		t.Fatalf("expected versionsLoadedMsg, got %T", msg)
+	}
+	if loaded.err != nil {
+		t.Fatalf("unexpected error: %v", loaded.err)
+	}
+	if loaded.curVersion != 2 {
+		t.Fatalf("curVersion = %d, want 2", loaded.curVersion)
+	}
+	if len(loaded.versions) != 3 {
+		t.Fatalf("versions len = %d, want 3", len(loaded.versions))
+	}
+	if loaded.versions[0].Version != 3 || loaded.versions[1].Version != 2 || loaded.versions[2].Version != 1 {
+		t.Fatalf("versions order = %+v", loaded.versions)
+	}
+	if loaded.versions[0].DeletionTime.IsZero() {
+		t.Fatalf("expected deleted version to carry deletion time")
+	}
+}
+
+func mustParseTime(t *testing.T, s string) time.Time {
+	t.Helper()
+	got, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatalf("parse time %q: %v", s, err)
+	}
+	return got
 }
 
 var _ tea.Msg = opCompletedMsg{}
