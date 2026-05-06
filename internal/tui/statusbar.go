@@ -65,6 +65,8 @@ func formatTTL(ti *vault.TokenInfo) string {
 	switch {
 	case !ti.ExpireTime.IsZero():
 		d = time.Until(ti.ExpireTime)
+	case !ti.IssueTime.IsZero() && ti.TTL > 0:
+		d = time.Until(ti.IssueTime.Add(ti.TTL))
 	case ti.TTL > 0:
 		d = ti.TTL
 	default:

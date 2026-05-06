@@ -55,10 +55,11 @@ func NewRoot(ctx *AppContext, initial Screen) tea.Model {
 func (r *rootModel) Theme() Theme { return r.theme }
 
 func (r *rootModel) Init() tea.Cmd {
+	cmds := []tea.Cmd{statusTickCmd()}
 	if cur := r.stack.Current(); cur != nil {
-		return cur.Init()
+		cmds = append(cmds, cur.Init())
 	}
-	return nil
+	return tea.Batch(cmds...)
 }
 
 func (r *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -67,6 +68,9 @@ func (r *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		r.width = m.Width
 		r.height = m.Height
+
+	case statusTickMsg:
+		return r, statusTickCmd()
 
 	case tea.KeyPressMsg:
 		if r.appErr != nil {
@@ -388,6 +392,12 @@ type tokenLookupMsg struct {
 }
 
 type autoRenewChangedMsg struct{}
+
+type statusTickMsg time.Time
+
+func statusTickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return statusTickMsg(t) })
+}
 
 // AutoRenewChanged notifies the root model that AutoRenewToken was toggled.
 func AutoRenewChanged() tea.Cmd {

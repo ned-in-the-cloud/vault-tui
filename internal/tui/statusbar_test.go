@@ -17,6 +17,7 @@ func TestFormatTTL(t *testing.T) {
 		{"seconds", &vault.TokenInfo{ExpireTime: time.Now().Add(45 * time.Second)}, "45s"},
 		{"minutes", &vault.TokenInfo{ExpireTime: time.Now().Add(5*time.Minute + 10*time.Second)}, "5m10s"},
 		{"hours", &vault.TokenInfo{ExpireTime: time.Now().Add(2*time.Hour + 30*time.Minute)}, "2h30m"},
+		{"issue+ttl fallback", &vault.TokenInfo{IssueTime: time.Now().Add(-30 * time.Second), TTL: 90 * time.Second}, "1m00s"},
 		{"expired", &vault.TokenInfo{ExpireTime: time.Now().Add(-time.Second)}, "expired"},
 	}
 	for _, tc := range cases {
