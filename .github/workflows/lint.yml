@@ -38,6 +38,8 @@ jobs:
       # targets a newer toolchain than the latest golangci-lint release binary.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
+        env:
+          NODE_OPTIONS: --no-deprecation
         with:
           version: latest
           install-mode: goinstall
