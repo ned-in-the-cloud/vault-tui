@@ -21,10 +21,23 @@ jobs:
           go-version-file: go.mod
           cache: false  # golangci-lint manages its own cache below
 
+      # golang.design/x/clipboard requires X11 and audio headers on Linux.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev \
+            libxss-dev \
+            libasound2-dev
+
+      # install-mode: goinstall builds golangci-lint with the Go version
+      # set above, avoiding "language version too old" errors when go.mod
+      # targets a newer toolchain than the latest golangci-lint release binary.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          install-mode: goinstall
           args: --timeout=5m
 
   vet:
@@ -38,6 +51,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev \
+            libxss-dev \
+            libasound2-dev
+
       - run: go vet ./...
 
   test:
@@ -50,5 +71,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev \
+            libxss-dev \
+            libasound2-dev
 
       - run: go test -race ./...
